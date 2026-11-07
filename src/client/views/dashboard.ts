@@ -1,6 +1,7 @@
 import {
   fetchExpensesApi,
   deleteExpenseApi,
+  restoreActivityApi,
   getExportCsvUrl,
   Expense,
   Stats,
@@ -375,9 +376,28 @@ export function initDashboard(): void {
   window.deleteExpense = async function (id: string) {
     if (!confirm('Are you sure you want to delete this expense?')) return;
     try {
-      const ok = await deleteExpenseApi(id);
-      if (ok) {
-        showToast('Expense deleted successfully');
+      const res = await deleteExpenseApi(id);
+      if (res && res.success) {
+        if (res.activity_id) {
+          showToast('Expense deleted', 'success', {
+            label: 'Undo',
+            onClick: async () => {
+              try {
+                const restored = await restoreActivityApi(res.activity_id!);
+                if (restored && restored.success) {
+                  showToast('Expense restored');
+                  fetchExpenses();
+                } else {
+                  showToast('Failed to undo deletion', 'error');
+                }
+              } catch (err: any) {
+                showToast(err.message || 'Failed to undo deletion', 'error');
+              }
+            },
+          });
+        } else {
+          showToast('Expense deleted successfully');
+        }
         fetchExpenses();
       } else {
         showToast('Failed to delete expense', 'error');
