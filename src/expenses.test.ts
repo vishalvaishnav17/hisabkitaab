@@ -1,11 +1,16 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { getPlatformProxy } from 'wrangler';
 import app from './index';
+import { applyFoundationMigration } from './test-utils';
 
 const proxy = await getPlatformProxy<{ DB: D1Database }>({
   configPath: 'wrangler.jsonc',
   remoteBindings: false,
   persist: false,
+});
+
+beforeAll(async () => {
+  await applyFoundationMigration(proxy.env.DB);
 });
 
 afterAll(() => proxy.dispose());
@@ -47,17 +52,17 @@ test('GET /api/expenses?date_range=this_month returns the ledger', async () => {
   const now = new Date().toISOString();
   await proxy.env.DB
     .prepare(
-      `INSERT INTO expenses (id, amount, description, category, payment_method, date, notes, created_at, updated_at)
+      `INSERT INTO expenses (id, amount_paise, description, category, payment_method, date, notes, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .bind('exp-today', 42, 'Tea', 'Food', 'UPI', today, null, now, now)
+    .bind('exp-today', 4200, 'Tea', 'Food', 'UPI', today, null, now, now)
     .run();
   await proxy.env.DB
     .prepare(
-      `INSERT INTO expenses (id, amount, description, category, payment_method, date, notes, created_at, updated_at)
+      `INSERT INTO expenses (id, amount_paise, description, category, payment_method, date, notes, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .bind('exp-old', 99, 'Old', 'Food', 'Cash', '2000-01-02', null, now, now)
+    .bind('exp-old', 9900, 'Old', 'Food', 'Cash', '2000-01-02', null, now, now)
     .run();
 
   const second = await app.request(

@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "db:init:local": "wrangler d1 execute hisabkitaab-db --local --file=schema.sql",
+    "db:migrate:local": "wrangler d1 migrations apply hisabkitaab-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply hisabkitaab-db --remote",
     "db:seed:local": "wrangler d1 execute hisabkitaab-db --local --file=seed.sql",
-    "db:init:remote": "wrangler d1 execute hisabkitaab-db --remote --file=schema.sql",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
