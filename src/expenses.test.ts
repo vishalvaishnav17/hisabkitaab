@@ -80,3 +80,40 @@ test('GET /api/expenses?date_range=this_month returns the ledger', async () => {
   expect(body.stats.monthSpend).toBe(42);
   expect(body.stats.count).toBe(1);
 }, 30_000);
+
+test('POST /api/expenses with amount and amount_expr saves and returns in GET', async () => {
+  const createRes = await app.request(
+    'http://localhost/api/expenses',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount: 4170,
+        amount_expr: '50 × 83.4',
+        description: 'US Software',
+        category: 'Others',
+        payment_method: 'Credit Card',
+        date: localISODate(),
+      }),
+    },
+    { DB: proxy.env.DB, CLERK_GATE: gate },
+  );
+  expect(createRes.status).toBe(201);
+  const created = (await createRes.json()) as { success: boolean; id: string };
+  expect(created.success).toBe(true);
+
+  const getRes = await app.request(
+    'http://localhost/api/expenses?date_range=this_month',
+    { method: 'GET' },
+    { DB: proxy.env.DB, CLERK_GATE: gate },
+  );
+  expect(getRes.status).toBe(200);
+  const data = (await getRes.json()) as {
+    expenses: { id: string; amount: number; amount_expr: string | null }[];
+  };
+  const found = data.expenses.find((e) => e.id === created.id);
+  expect(found).toBeDefined();
+  expect(found?.amount).toBe(4170);
+  expect(found?.amount_expr).toBe('50 × 83.4');
+});
+

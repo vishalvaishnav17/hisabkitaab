@@ -312,22 +312,8 @@
       <form id="expenseForm" class="mt-4 space-y-4">
         <input type="hidden" id="formExpenseId">
 
-        <!-- Amount -->
-        <div>
-          <label class="block text-xs font-medium text-zinc-400 mb-1">Amount (₹) *</label>
-          <div class="relative">
-            <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 font-bold mono">₹</span>
-            <input type="number" inputmode="decimal" id="formAmount" step="0.01" min="0.01" required placeholder="0.00"
-              class="w-full bg-surface2 border border-borderDark rounded-xl pl-9 pr-4 h-12 text-base font-semibold mono text-emerald-400 focus:outline-none focus:border-emerald-500 transition-colors">
-          </div>
-          <!-- Quick Amount Chips -->
-          <div class="flex flex-wrap gap-2 mt-2">
-            <button type="button" class="quick-amt text-xs h-9 px-3 rounded-md bg-surface2 border border-borderDark text-zinc-400 hover:text-white" data-amt="100">+₹100</button>
-            <button type="button" class="quick-amt text-xs h-9 px-3 rounded-md bg-surface2 border border-borderDark text-zinc-400 hover:text-white" data-amt="500">+₹500</button>
-            <button type="button" class="quick-amt text-xs h-9 px-3 rounded-md bg-surface2 border border-borderDark text-zinc-400 hover:text-white" data-amt="1000">+₹1,000</button>
-            <button type="button" class="quick-amt text-xs h-9 px-3 rounded-md bg-surface2 border border-borderDark text-zinc-400 hover:text-white" data-amt="2000">+₹2,000</button>
-          </div>
-        </div>
+        <!-- Amount Input (rendered by createAmountInput) -->
+        <div id="formAmountContainer"></div>
 
         <!-- Description -->
         <div>

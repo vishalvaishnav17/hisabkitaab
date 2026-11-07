@@ -1,6 +1,7 @@
 export interface Expense {
   id: string;
   amount: number;
+  amount_expr?: string | null;
   description: string;
   category: string;
   payment_method: string;
@@ -29,6 +30,7 @@ export interface ExpenseFilterParams {
 
 export interface ExpensePayload {
   amount: number;
+  amount_expr?: string | null;
   description: string;
   category: string;
   payment_method: string;
