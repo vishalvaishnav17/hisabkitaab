@@ -178,14 +178,16 @@ groupsRouter.post('/api/groups', async (c) => {
 
     // Verify all member IDs exist in people and are not deleted
     const memberIds = Array.from(memberSet);
-    for (const pid of memberIds) {
-      const person = await db
-        .prepare('SELECT id FROM people WHERE id = ? AND deleted_at IS NULL')
-        .bind(pid)
-        .first();
-      if (!person) {
-        return c.json({ error: `Person "${pid}" not found` }, 400);
-      }
+    const found = await db
+      .prepare(
+        `SELECT id FROM people WHERE deleted_at IS NULL AND id IN (${memberIds.map(() => '?').join(',')})`
+      )
+      .bind(...memberIds)
+      .all<{ id: string }>();
+    const foundIds = new Set((found.results || []).map((r) => r.id));
+    const missing = memberIds.find((pid) => !foundIds.has(pid));
+    if (missing) {
+      return c.json({ error: `Person "${missing}" not found` }, 400);
     }
 
     const id = crypto.randomUUID();

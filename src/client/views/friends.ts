@@ -7,7 +7,7 @@ export function renderFriends(container: HTMLElement): void {
       </div>
       <h2 class="text-lg font-bold text-white tracking-tight">Friends</h2>
       <p class="text-sm text-zinc-400 mt-1 max-w-sm mx-auto">Manage friends, track who owes whom, and record direct settlements.</p>
-      <span class="inline-block mt-4 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full">Coming in chunk 08</span>
+      <span class="inline-block mt-4 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full">Coming soon</span>
     </div>
   `;
   if (window.lucide) {

@@ -156,7 +156,7 @@ export async function getGroupLedger(db: D1Database, groupId: string): Promise<G
       `SELECT s.expense_id, s.person_id, s.amount_paise, p.name as person_name
        FROM expense_shares s
        JOIN group_expenses e ON s.expense_id = e.id
-       JOIN people p ON s.person_id = p.id
+       LEFT JOIN people p ON s.person_id = p.id
        WHERE e.group_id = ? AND e.deleted_at IS NULL`
     )
     .bind(groupId)
@@ -166,8 +166,8 @@ export async function getGroupLedger(db: D1Database, groupId: string): Promise<G
     .prepare(
       `SELECT t.*, p1.name as from_name, p2.name as to_name
        FROM transfers t
-       JOIN people p1 ON t.from_person = p1.id
-       JOIN people p2 ON t.to_person = p2.id
+       LEFT JOIN people p1 ON t.from_person = p1.id
+       LEFT JOIN people p2 ON t.to_person = p2.id
        WHERE t.group_id = ? AND t.deleted_at IS NULL
        ORDER BY t.date DESC, t.created_at DESC`
     )
@@ -533,7 +533,10 @@ export async function updateGroupExpense(
       }
       shares = splitAmount(amount_paise, { type: 'equal', personIds: input.participant_ids });
       split_type = 'equal';
-    } else if (input.amount_paise !== undefined) {
+    } else if (input.amount_paise !== undefined && input.amount_paise !== existing.amount_paise) {
+      if (existing.split_type === 'exact') {
+        throw new ServiceError('Amount changed on an exact split: send the new split amounts', 400);
+      }
       // Amount changed, re-split existing participants
       const prevIds = existingShares.map((s) => s.person_id);
       for (const pid of prevIds) {
