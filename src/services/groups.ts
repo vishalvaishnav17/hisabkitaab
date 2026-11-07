@@ -2,7 +2,7 @@ import { splitAmount, SplitError, Share } from '../split/split';
 import { computeBalances, Expense, Transfer } from '../split/balances';
 import { minimizeSettlements, pairwiseDebts, SettlementPayment } from '../split/settle';
 import { suggestNextPayer } from '../split/next-payer';
-import { formatPaise, logged } from '../db/activity';
+import { formatPaise, logged, ActivityEntryInput } from '../db/activity';
 import { formatISODate } from '../db/dates';
 
 export class ServiceError extends Error {
@@ -252,10 +252,17 @@ export async function getGroupBalances(db: D1Database, groupId: string): Promise
   };
 }
 
-export async function createGroupExpense(
+export interface BuildGroupExpenseResult {
+  id: string;
+  statements: D1PreparedStatement[];
+  activityEntry: ActivityEntryInput;
+  expense: GroupExpenseRow;
+}
+
+export async function buildGroupExpense(
   db: D1Database,
   input: CreateGroupExpenseInput
-): Promise<{ id: string; activity_id: string; expense: GroupExpenseRow }> {
+): Promise<BuildGroupExpenseResult> {
   const group = await db
     .prepare('SELECT * FROM groups WHERE id = ? AND deleted_at IS NULL')
     .bind(input.group_id)
@@ -401,7 +408,7 @@ export async function createGroupExpense(
 
   const summary = `${group.name} · ${description}: ${formatPaise(amount_paise)}`;
 
-  const activity_id = await logged(db, [expenseStmt, ...shareStmts], {
+  const activityEntry: ActivityEntryInput = {
     entity_type: 'group_expense',
     entity_id: id,
     group_id: input.group_id,
@@ -409,9 +416,23 @@ export async function createGroupExpense(
     summary,
     before: null,
     after: expenseRow,
-  });
+  };
 
-  return { id, activity_id, expense: expenseRow };
+  return {
+    id,
+    statements: [expenseStmt, ...shareStmts],
+    activityEntry,
+    expense: expenseRow,
+  };
+}
+
+export async function createGroupExpense(
+  db: D1Database,
+  input: CreateGroupExpenseInput
+): Promise<{ id: string; activity_id: string; expense: GroupExpenseRow }> {
+  const built = await buildGroupExpense(db, input);
+  const activity_id = await logged(db, built.statements, built.activityEntry);
+  return { id: built.id, activity_id, expense: built.expense };
 }
 
 export async function updateGroupExpense(

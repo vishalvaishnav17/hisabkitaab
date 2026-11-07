@@ -76,36 +76,47 @@ export interface ActivityEntryInput {
 export async function logged(
   db: D1Database,
   statements: D1PreparedStatement[],
-  entry: ActivityEntryInput,
+  entry: ActivityEntryInput | ActivityEntryInput[],
 ): Promise<string> {
-  const id = crypto.randomUUID();
+  const entries = Array.isArray(entry) ? entry : [entry];
   const at = new Date().toISOString();
-  const beforeJson = entry.before !== undefined && entry.before !== null
-    ? (typeof entry.before === 'string' ? entry.before : JSON.stringify(entry.before))
-    : null;
-  const afterJson = entry.after !== undefined && entry.after !== null
-    ? (typeof entry.after === 'string' ? entry.after : JSON.stringify(entry.after))
-    : null;
+  const activityStmts: D1PreparedStatement[] = [];
+  let firstId = '';
 
-  const activityStmt = db
-    .prepare(
-      `INSERT INTO activity (id, at, entity_type, entity_id, group_id, action, summary, before_json, after_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .bind(
-      id,
-      at,
-      entry.entity_type,
-      entry.entity_id,
-      entry.group_id ?? null,
-      entry.action,
-      entry.summary,
-      beforeJson,
-      afterJson,
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    const id = crypto.randomUUID();
+    if (i === 0) firstId = id;
+
+    const beforeJson = e.before !== undefined && e.before !== null
+      ? (typeof e.before === 'string' ? e.before : JSON.stringify(e.before))
+      : null;
+    const afterJson = e.after !== undefined && e.after !== null
+      ? (typeof e.after === 'string' ? e.after : JSON.stringify(e.after))
+      : null;
+
+    activityStmts.push(
+      db
+        .prepare(
+          `INSERT INTO activity (id, at, entity_type, entity_id, group_id, action, summary, before_json, after_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          id,
+          at,
+          e.entity_type,
+          e.entity_id,
+          e.group_id ?? null,
+          e.action,
+          e.summary,
+          beforeJson,
+          afterJson,
+        )
     );
+  }
 
-  await db.batch([...statements, activityStmt]);
-  return id;
+  await db.batch([...statements, ...activityStmts]);
+  return firstId;
 }
 
 export type Restorer = (
