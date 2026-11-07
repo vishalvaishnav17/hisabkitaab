@@ -1,11 +1,11 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { renderHtml } from './frontend';
-import { manifest, pngResponse, serviceWorker } from './pwa';
+import { manifest, serviceWorker } from './pwa';
 
 type Bindings = {
   DB: D1Database;
   CLERK_GATE: Fetcher;
+  ASSETS: Fetcher;
 };
 
 interface Expense {
@@ -42,8 +42,15 @@ app.get('/sw.js', () => {
   });
 });
 
-app.get('/icons/:name', (c) => {
-  return pngResponse(c.req.param('name')) ?? c.notFound();
+app.get('/icons/:name', async (c) => {
+  const res = await c.env.ASSETS.fetch(c.req.raw);
+  if (res.status === 404) return c.notFound();
+  const headers = new Headers(res.headers);
+  headers.set('Cache-Control', 'public, max-age=604800');
+  return new Response(res.body, {
+    status: res.status,
+    headers,
+  });
 });
 
 // Clerk session check lives in the clerk-gate worker. This app only serves
@@ -95,10 +102,6 @@ async function ensureTables(db: D1Database) {
   ]);
 }
 
-// Serve Frontend UI
-app.get('/', (c) => {
-  return c.html(renderHtml());
-});
 
 // API: List Expenses with Filters and Stats
 app.get('/api/expenses', async (c) => {
@@ -363,6 +366,27 @@ app.get('/api/export', async (c) => {
       'Content-Type': 'text/csv; charset=utf-8',
       'Content-Disposition': 'attachment; filename="hisabkitaab-expenses.csv"'
     }
+  });
+});
+
+// Catch-all route to serve static assets from ASSETS behind Clerk gate
+app.get('*', async (c) => {
+  const res = await c.env.ASSETS.fetch(c.req.raw);
+  const isHtml =
+    c.req.path === '/' ||
+    c.req.path.endsWith('.html') ||
+    res.headers.get('content-type')?.includes('text/html');
+
+  const headers = new Headers(res.headers);
+  if (isHtml) {
+    headers.set('Cache-Control', 'no-cache');
+  } else if (res.ok) {
+    headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+  }
+
+  return new Response(res.body, {
+    status: res.status,
+    headers,
   });
 });
 

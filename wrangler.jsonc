@@ -6,6 +6,15 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
+	"build": {
+		"command": "bun run build",
+		"watch_dir": "src/client"
+	},
+	"assets": {
+		"directory": "./dist",
+		"binding": "ASSETS",
+		"run_worker_first": true
+	},
 	"workers_dev": false,
 	"preview_urls": false,
 	"routes": [

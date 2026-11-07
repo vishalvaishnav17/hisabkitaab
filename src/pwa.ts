@@ -1,5 +1,3 @@
-import { icons } from './pwa-icons';
-
 export const manifest = {
   name: 'HisabKitaab',
   short_name: 'HisabKitaab',
@@ -28,17 +26,3 @@ self.addEventListener('activate', (event) => {
 });
 self.addEventListener('fetch', () => {});
 `;
-
-export function pngResponse(name: string): Response | null {
-  const encoded = icons[name];
-  if (!encoded) return null;
-  const binary = atob(encoded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new Response(bytes, {
-    headers: {
-      'Content-Type': 'image/png',
-      'Cache-Control': 'public, max-age=604800',
-    },
-  });
-}
