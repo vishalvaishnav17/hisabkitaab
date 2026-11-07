@@ -19,7 +19,9 @@ export function formatPaise(paise: number): string {
 }
 
 export function todayISO(): string {
-  return new Date().toISOString().split('T')[0];
+  // Local date, not UTC: in IST, toISOString() gives yesterday before 5:30 AM.
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export function escapeHtml(str: string | null | undefined): string {

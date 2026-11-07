@@ -1,3 +1,4 @@
+import { todayISO } from '../../format';
 /**
  * Formats integer paise into a formatted INR currency string.
  * Whole rupee amounts are formatted without decimals (e.g. ₹2,340, ₹500).
@@ -188,7 +189,7 @@ export function settlementToTransferForm(
     amount_paise: settlement.amount_paise,
     amount_expr: null,
     method: 'UPI',
-    date: today || new Date().toISOString().split('T')[0],
+    date: today || todayISO(),
     note: '',
   };
 }
