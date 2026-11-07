@@ -6,7 +6,7 @@ import {
   Expense,
   Stats,
 } from '../api';
-import { formatINR, escapeHtml } from '../format';
+import { formatPaise, formatINR, escapeHtml } from '../format';
 import { formatExpr } from '../../split/amount';
 import { openExpenseModal } from '../components/expense-sheet';
 import { showToast } from '../components/toast';
@@ -46,15 +46,15 @@ export function updateStats(stats?: Stats): void {
   const topCatEl = document.getElementById('statTopCategory');
   const topCatAmtEl = document.getElementById('statTopCategoryAmount');
 
-  if (totalEl) totalEl.innerText = formatINR(stats.totalSpend);
+  if (totalEl) totalEl.innerText = formatPaise(stats.totalSpend);
   if (countEl) countEl.innerText = `${stats.count} transactions recorded`;
-  if (monthEl) monthEl.innerText = formatINR(stats.monthSpend);
-  if (avgEl) avgEl.innerText = formatINR(stats.dailyAverage);
+  if (monthEl) monthEl.innerText = formatPaise(stats.monthSpend);
+  if (avgEl) avgEl.innerText = formatPaise(stats.dailyAverage);
 
   if (stats.topCategory && stats.topCategory.category) {
     if (topCatEl) topCatEl.innerText = stats.topCategory.category;
-    const amount = stats.topCategory.amount ?? stats.topCategory.total ?? 0;
-    if (topCatAmtEl) topCatAmtEl.innerText = formatINR(amount) + ' spent';
+    const amount = stats.topCategory.amount_paise ?? stats.topCategory.total_paise ?? stats.topCategory.amount ?? stats.topCategory.total ?? 0;
+    if (topCatAmtEl) topCatAmtEl.innerText = formatPaise(amount) + ' spent';
   } else {
     if (topCatEl) topCatEl.innerText = '-';
     if (topCatAmtEl) topCatAmtEl.innerText = '₹0 total';
@@ -79,7 +79,7 @@ export function updateCharts(stats?: Stats): void {
   } else {
     if (noData) noData.classList.add('hidden');
     const labels = catData.map((c) => c.category);
-    const values = catData.map((c) => c.total);
+    const values = catData.map((c) => (c.total_paise ?? c.total) / 100);
     const colors = catData.map((c) => categoryColors[c.category] || '#71717a');
 
     if (catCanvas && typeof Chart !== 'undefined') {
@@ -139,7 +139,7 @@ export function updateCharts(stats?: Stats): void {
   }
 
   const trendLabels = trends.map((t) => t.date.slice(5)); // MM-DD
-  const trendValues = trends.map((t) => t.amount);
+  const trendValues = trends.map((t) => (t.amount_paise ?? t.amount) / 100);
 
   if (trendCanvas && typeof Chart !== 'undefined') {
     trendChart = new Chart(trendCanvas, {
@@ -210,6 +210,7 @@ export function renderTable(expenses: Expense[]): void {
   empty.classList.add('hidden');
 
   expenses.forEach((item) => {
+    const isGroup = item.source === 'group';
     const color = categoryColors[item.category] || '#71717a';
     const notes = item.notes
       ? `<div class="text-[11px] text-zinc-500 truncate mt-0.5">${escapeHtml(item.notes)}</div>`
@@ -219,6 +220,12 @@ export function renderTable(expenses: Expense[]): void {
             style="background-color: ${color}15; color: ${color}; border-color: ${color}30">
         ${escapeHtml(item.category)}
       </span>`;
+
+    const groupBadge = isGroup
+      ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 max-w-[10rem] truncate shrink-0">
+          👥 ${escapeHtml(item.group_name || 'Group')}
+        </span>`
+      : '';
 
     const formatDisplayExpr = (expr?: string | null): string => {
       if (!expr) return '';
@@ -235,10 +242,28 @@ export function renderTable(expenses: Expense[]): void {
 
     const tr = document.createElement('tr');
     tr.className = 'hover:bg-surface2/60 transition-colors group';
+
+    const actionsHtml = isGroup
+      ? `<a href="#/groups/${encodeURIComponent(item.group_id || '')}" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-lg transition-colors border border-emerald-500/20" title="View Group">
+           <span>Group</span>
+           <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i>
+         </a>`
+      : `<div class="flex items-center justify-end gap-1.5 opacity-80 group-hover:opacity-100">
+           <button onclick="editExpense('${item.id}')" class="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors" title="Edit">
+             <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+           </button>
+           <button onclick="deleteExpense('${item.id}')" class="p-1.5 text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors" title="Delete">
+             <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+           </button>
+         </div>`;
+
     tr.innerHTML = `
       <td class="py-3 px-4 text-xs text-zinc-400 whitespace-nowrap mono">${item.date}</td>
       <td class="py-3 px-4">
-        <div class="font-medium text-white text-sm">${escapeHtml(item.description)}</div>
+        <div class="flex items-center gap-2">
+          <span class="font-medium text-white text-sm">${escapeHtml(item.description)}</span>
+          ${groupBadge}
+        </div>
         ${notes}
       </td>
       <td class="py-3 px-4 whitespace-nowrap">${categoryPill}</td>
@@ -246,32 +271,43 @@ export function renderTable(expenses: Expense[]): void {
         <span class="text-xs text-zinc-400 bg-surface2 px-2 py-0.5 rounded border border-borderDark font-mono">${escapeHtml(item.payment_method)}</span>
       </td>
       <td class="py-3 px-4 text-right whitespace-nowrap">
-        <span class="font-semibold text-white mono">${formatINR(item.amount)}</span>
+        <span class="font-semibold text-white mono">${formatPaise(item.amount_paise)}</span>
         ${exprHtml}
       </td>
       <td class="py-3 px-4 text-right whitespace-nowrap">
-        <div class="flex items-center justify-end gap-1.5 opacity-80 group-hover:opacity-100">
-          <button onclick="editExpense('${item.id}')" class="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors" title="Edit">
-            <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
-          </button>
-          <button onclick="deleteExpense('${item.id}')" class="p-1.5 text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors" title="Delete">
-            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-          </button>
-        </div>
+        ${actionsHtml}
       </td>
     `;
     body.appendChild(tr);
 
     const card = document.createElement('article');
     card.className = 'rounded-xl border border-borderDark bg-black/30 p-3';
+
+    const cardActionsHtml = isGroup
+      ? `<a href="#/groups/${encodeURIComponent(item.group_id || '')}" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+           <span>View Group</span>
+           <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i>
+         </a>`
+      : `<div class="flex items-center">
+           <button onclick="editExpense('${item.id}')" aria-label="Edit" class="h-11 w-11 flex items-center justify-center text-zinc-400 hover:text-white rounded-lg">
+             <i data-lucide="edit-2" class="w-4 h-4"></i>
+           </button>
+           <button onclick="deleteExpense('${item.id}')" aria-label="Delete" class="h-11 w-11 flex items-center justify-center text-zinc-400 hover:text-rose-400 rounded-lg">
+             <i data-lucide="trash-2" class="w-4 h-4"></i>
+           </button>
+         </div>`;
+
     card.innerHTML = `
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">
-          <div class="font-medium text-white text-sm truncate">${escapeHtml(item.description)}</div>
+          <div class="flex items-center gap-2">
+            <span class="font-medium text-white text-sm truncate">${escapeHtml(item.description)}</span>
+            ${groupBadge}
+          </div>
           ${notes}
         </div>
         <div class="text-right shrink-0">
-          <div class="font-semibold text-white mono">${formatINR(item.amount)}</div>
+          <div class="font-semibold text-white mono">${formatPaise(item.amount_paise)}</div>
           ${exprHtml}
         </div>
       </div>
@@ -281,14 +317,7 @@ export function renderTable(expenses: Expense[]): void {
       </div>
       <div class="mt-2 flex items-center justify-between gap-2">
         <span class="text-[11px] text-zinc-500 mono">${item.date}</span>
-        <div class="flex items-center">
-          <button onclick="editExpense('${item.id}')" aria-label="Edit" class="h-11 w-11 flex items-center justify-center text-zinc-400 hover:text-white rounded-lg">
-            <i data-lucide="edit-2" class="w-4 h-4"></i>
-          </button>
-          <button onclick="deleteExpense('${item.id}')" aria-label="Delete" class="h-11 w-11 flex items-center justify-center text-zinc-400 hover:text-rose-400 rounded-lg">
-            <i data-lucide="trash-2" class="w-4 h-4"></i>
-          </button>
-        </div>
+        ${cardActionsHtml}
       </div>
     `;
     cards.appendChild(card);
@@ -310,11 +339,13 @@ export async function fetchExpenses(): Promise<void> {
   const categoryFilter = document.getElementById('categoryFilter') as HTMLSelectElement | null;
   const paymentFilter = document.getElementById('paymentFilter') as HTMLSelectElement | null;
   const dateFilter = document.getElementById('dateFilter') as HTMLSelectElement | null;
+  const includeGroupsToggle = document.getElementById('includeGroupsToggle') as HTMLInputElement | null;
 
   const search = searchInput?.value || '';
   const category = categoryFilter?.value || '';
   const payment = paymentFilter?.value || '';
   const dateRange = dateFilter?.value || '';
+  const includeGroups = includeGroupsToggle ? (includeGroupsToggle.checked ? '1' : '0') : '1';
 
   try {
     const data = await fetchExpensesApi({
@@ -322,6 +353,7 @@ export async function fetchExpenses(): Promise<void> {
       category,
       payment_method: payment,
       date_range: dateRange,
+      include_groups: includeGroups,
     });
     if (!data) return;
     cachedExpenses = data.expenses || [];
@@ -345,6 +377,7 @@ export function initDashboard(): void {
   const categoryFilter = document.getElementById('categoryFilter');
   const paymentFilter = document.getElementById('paymentFilter');
   const dateFilter = document.getElementById('dateFilter') as HTMLSelectElement | null;
+  const includeGroupsToggle = document.getElementById('includeGroupsToggle') as HTMLInputElement | null;
   const exportCsvBtn = document.getElementById('exportCsvBtn');
 
   if (searchInput) {
@@ -359,21 +392,28 @@ export function initDashboard(): void {
   if (dateFilter) {
     dateFilter.addEventListener('change', fetchExpenses);
   }
+  if (includeGroupsToggle) {
+    includeGroupsToggle.addEventListener('change', fetchExpenses);
+  }
 
   if (exportCsvBtn) {
     exportCsvBtn.addEventListener('click', () => {
       const dateRange = dateFilter?.value || 'this_month';
-      window.location.href = getExportCsvUrl(dateRange);
+      const includeGroups = includeGroupsToggle ? includeGroupsToggle.checked : true;
+      window.location.href = getExportCsvUrl(dateRange, includeGroups);
     });
   }
 
   window.editExpense = function (id: string) {
     const item = cachedExpenses.find((e) => e.id === id);
-    if (!item) return;
+    if (!item || item.source === 'group') return;
     openExpenseModal(item);
   };
 
   window.deleteExpense = async function (id: string) {
+    const item = cachedExpenses.find((e) => e.id === id);
+    if (item && item.source === 'group') return;
+
     if (!confirm('Are you sure you want to delete this expense?')) return;
     try {
       const res = await deleteExpenseApi(id);

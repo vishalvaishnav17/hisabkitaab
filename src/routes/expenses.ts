@@ -14,10 +14,23 @@ export interface ExpenseRow {
   notes: string | null;
   created_at: string;
   updated_at: string;
-  deleted_at: string | null;
+  deleted_at?: string | null;
+  source?: 'personal' | 'group';
+  group_id?: string | null;
+  group_name?: string | null;
+  group_expense_id?: string | null;
 }
 
 const expensesRouter = new Hono<{ Bindings: Bindings }>();
+
+async function hasGroupTables(db: D1Database): Promise<boolean> {
+  try {
+    const res = await db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='expense_shares'").first();
+    return !!res;
+  } catch {
+    return false;
+  }
+}
 
 // API: List Expenses with Filters and Stats
 expensesRouter.get('/api/expenses', async (c) => {
@@ -30,52 +43,144 @@ expensesRouter.get('/api/expenses', async (c) => {
   const category = c.req.query('category')?.trim();
   const paymentMethod = c.req.query('payment_method')?.trim();
   const dateRange = c.req.query('date_range') || 'this_month';
+  const includeGroupsParam = c.req.query('include_groups');
+  const userWantsGroups = includeGroupsParam === undefined || (includeGroupsParam !== '0' && includeGroupsParam !== 'false');
+  const includeGroups = userWantsGroups && (await hasGroupTables(db));
 
-  // Build Filter Clauses
-  const whereClauses: string[] = ['deleted_at IS NULL'];
-  const params: any[] = [];
+  // Build Filter Clauses for personal expenses
+  const personalWhere: string[] = ['deleted_at IS NULL'];
+  const personalParams: any[] = [];
+
+  // Build Filter Clauses for group expenses
+  const groupWhere: string[] = ["s.person_id = 'me'", 'ge.deleted_at IS NULL', 'g.deleted_at IS NULL'];
+  const groupParams: any[] = [];
 
   if (search) {
-    whereClauses.push('(description LIKE ? OR notes LIKE ? OR category LIKE ?)');
-    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    personalWhere.push('(description LIKE ? OR notes LIKE ? OR category LIKE ?)');
+    personalParams.push(`%${search}%`, `%${search}%`, `%${search}%`);
+
+    groupWhere.push('(ge.description LIKE ? OR ge.notes LIKE ? OR ge.category LIKE ?)');
+    groupParams.push(`%${search}%`, `%${search}%`, `%${search}%`);
   }
 
   if (category) {
-    whereClauses.push('category = ?');
-    params.push(category);
+    personalWhere.push('category = ?');
+    personalParams.push(category);
+
+    groupWhere.push('ge.category = ?');
+    groupParams.push(category);
   }
 
   if (paymentMethod) {
-    whereClauses.push('payment_method = ?');
-    params.push(paymentMethod);
+    personalWhere.push('payment_method = ?');
+    personalParams.push(paymentMethod);
+
+    if (paymentMethod === 'Group') {
+      // Matches group expenses
+    } else {
+      groupWhere.push('1 = 0');
+    }
   }
 
   const { clause: dateClause, params: dateParams } = getDateRangeClause(dateRange);
   if (dateClause) {
-    whereClauses.push(dateClause);
-    params.push(...dateParams);
+    personalWhere.push(dateClause);
+    personalParams.push(...dateParams);
+
+    groupWhere.push(dateClause.replace(/\bdate\b/g, 'ge.date'));
+    groupParams.push(...dateParams);
   }
 
-  const whereSql = `WHERE ${whereClauses.join(' AND ')}`;
-
   // 1. Fetch expenses
-  const sql = `SELECT * FROM expenses ${whereSql} ORDER BY date DESC, created_at DESC LIMIT 500`;
-  const { results: rawExpenses } = await db.prepare(sql).bind(...params).all<ExpenseRow>();
+  let rawExpenses: ExpenseRow[] = [];
+  if (includeGroups) {
+    const unionSql = `
+      SELECT 
+        id,
+        amount_paise,
+        amount_expr,
+        description,
+        category,
+        payment_method,
+        date,
+        notes,
+        created_at,
+        updated_at,
+        'personal' AS source,
+        NULL AS group_id,
+        NULL AS group_name,
+        NULL AS group_expense_id
+      FROM expenses
+      WHERE ${personalWhere.join(' AND ')}
 
-  // 2. Compute Filtered Stats
+      UNION ALL
+
+      SELECT
+        ge.id AS id,
+        s.amount_paise AS amount_paise,
+        ge.amount_expr AS amount_expr,
+        ge.description AS description,
+        ge.category AS category,
+        'Group' AS payment_method,
+        ge.date AS date,
+        ge.notes AS notes,
+        ge.created_at AS created_at,
+        ge.updated_at AS updated_at,
+        'group' AS source,
+        g.id AS group_id,
+        g.name AS group_name,
+        ge.id AS group_expense_id
+      FROM expense_shares s
+      JOIN group_expenses ge ON s.expense_id = ge.id
+      JOIN groups g ON ge.group_id = g.id
+      WHERE ${groupWhere.join(' AND ')}
+
+      ORDER BY date DESC, created_at DESC
+      LIMIT 500
+    `;
+    const res = await db.prepare(unionSql).bind(...personalParams, ...groupParams).all<ExpenseRow>();
+    rawExpenses = res.results || [];
+  } else {
+    const sql = `
+      SELECT 
+        id,
+        amount_paise,
+        amount_expr,
+        description,
+        category,
+        payment_method,
+        date,
+        notes,
+        created_at,
+        updated_at,
+        'personal' AS source,
+        NULL AS group_id,
+        NULL AS group_name,
+        NULL AS group_expense_id
+      FROM expenses
+      WHERE ${personalWhere.join(' AND ')}
+      ORDER BY date DESC, created_at DESC
+      LIMIT 500
+    `;
+    const res = await db.prepare(sql).bind(...personalParams).all<ExpenseRow>();
+    rawExpenses = res.results || [];
+  }
+
+  // 2. Compute Filtered Stats (all in integer paise)
   let totalSpend = 0;
   const categoryMap: Record<string, number> = {};
   const activeDays = new Set<string>();
 
   const expenses = rawExpenses.map((e) => {
-    const amount = e.amount_paise / 100;
-    totalSpend += amount;
-    categoryMap[e.category] = (categoryMap[e.category] || 0) + amount;
+    const amount_paise = e.amount_paise;
+    totalSpend += amount_paise;
+    categoryMap[e.category] = (categoryMap[e.category] || 0) + amount_paise;
     activeDays.add(e.date);
 
     return {
       id: e.id,
-      amount,
+      amount_paise,
+      amount: amount_paise / 100, // legacy alias in rupees for activity tests
       amount_expr: e.amount_expr,
       description: e.description,
       category: e.category,
@@ -84,11 +189,21 @@ expensesRouter.get('/api/expenses', async (c) => {
       notes: e.notes,
       created_at: e.created_at,
       updated_at: e.updated_at,
+      source: (e.source || 'personal') as 'personal' | 'group',
+      group_id: e.group_id ?? null,
+      group_name: e.group_name ?? null,
+      group_expense_id: e.group_expense_id ?? null,
     };
   });
 
   const categoryBreakdown = Object.entries(categoryMap)
-    .map(([cat, total]) => ({ category: cat, total, amount: total }))
+    .map(([cat, total]) => ({
+      category: cat,
+      total,
+      amount: total,
+      total_paise: total,
+      amount_paise: total,
+    }))
     .sort((a, b) => b.total - a.total);
 
   const topCategory = categoryBreakdown.length > 0 ? categoryBreakdown[0] : null;
@@ -96,35 +211,82 @@ expensesRouter.get('/api/expenses', async (c) => {
 
   // 3. Compute Current Month Spend (Absolute)
   const { start: thisMonthStart, end: nextMonthStart } = getThisMonthRange();
-  const monthRes = await db
-    .prepare('SELECT SUM(amount_paise) as monthSpendPaise FROM expenses WHERE date >= ? AND date < ? AND deleted_at IS NULL')
-    .bind(thisMonthStart, nextMonthStart)
-    .first<{ monthSpendPaise: number | null }>();
-  const monthSpend = (monthRes?.monthSpendPaise || 0) / 100;
+  let monthSpend = 0;
+  if (includeGroups) {
+    const monthRes = await db
+      .prepare(`
+        SELECT (
+          (SELECT COALESCE(SUM(amount_paise), 0) FROM expenses WHERE date >= ? AND date < ? AND deleted_at IS NULL)
+          +
+          (SELECT COALESCE(SUM(s.amount_paise), 0)
+           FROM expense_shares s
+           JOIN group_expenses ge ON s.expense_id = ge.id
+           JOIN groups g ON ge.group_id = g.id
+           WHERE s.person_id = 'me' AND ge.deleted_at IS NULL AND g.deleted_at IS NULL
+             AND ge.date >= ? AND ge.date < ?)
+        ) AS monthSpendPaise
+      `)
+      .bind(thisMonthStart, nextMonthStart, thisMonthStart, nextMonthStart)
+      .first<{ monthSpendPaise: number | null }>();
+    monthSpend = monthRes?.monthSpendPaise || 0;
+  } else {
+    const monthRes = await db
+      .prepare('SELECT COALESCE(SUM(amount_paise), 0) AS monthSpendPaise FROM expenses WHERE date >= ? AND date < ? AND deleted_at IS NULL')
+      .bind(thisMonthStart, nextMonthStart)
+      .first<{ monthSpendPaise: number | null }>();
+    monthSpend = monthRes?.monthSpendPaise || 0;
+  }
 
   // 4. Compute Daily Trends for Last 14 days
-  const trendsRes = await db
-    .prepare(`
-      SELECT date, SUM(amount_paise) as amount_paise 
-      FROM expenses 
-      WHERE date >= date('now', '-14 days') AND deleted_at IS NULL
-      GROUP BY date 
-      ORDER BY date ASC
-    `)
-    .all<{ date: string; amount_paise: number }>();
+  let trendsRes: { results?: { date: string; amount_paise: number }[] };
+  if (includeGroups) {
+    trendsRes = await db
+      .prepare(`
+        SELECT date, SUM(amount_paise) as amount_paise 
+        FROM (
+          SELECT date, amount_paise 
+          FROM expenses 
+          WHERE date >= date('now', '-14 days') AND deleted_at IS NULL
+          UNION ALL
+          SELECT ge.date, s.amount_paise 
+          FROM expense_shares s
+          JOIN group_expenses ge ON s.expense_id = ge.id
+          JOIN groups g ON ge.group_id = g.id
+          WHERE s.person_id = 'me' AND ge.deleted_at IS NULL AND g.deleted_at IS NULL
+            AND ge.date >= date('now', '-14 days')
+        )
+        GROUP BY date 
+        ORDER BY date ASC
+      `)
+      .all<{ date: string; amount_paise: number }>();
+  } else {
+    trendsRes = await db
+      .prepare(`
+        SELECT date, SUM(amount_paise) as amount_paise 
+        FROM expenses 
+        WHERE date >= date('now', '-14 days') AND deleted_at IS NULL
+        GROUP BY date 
+        ORDER BY date ASC
+      `)
+      .all<{ date: string; amount_paise: number }>();
+  }
 
   const dailyTrends = (trendsRes.results || []).map((r) => ({
     date: r.date,
-    amount: r.amount_paise / 100,
+    amount: r.amount_paise,
+    amount_paise: r.amount_paise,
   }));
 
   return c.json({
     expenses,
     stats: {
       totalSpend,
+      total_spend_paise: totalSpend,
       count: expenses.length,
       monthSpend,
+      month_spend_paise: monthSpend,
       dailyAverage,
+      daily_average_paise: dailyAverage,
       topCategory,
       categoryBreakdown,
       dailyTrends,
@@ -141,7 +303,15 @@ expensesRouter.post('/api/expenses', async (c) => {
 
   try {
     const body = await c.req.json();
-    const amount = Number(body.amount);
+    let amount_paise: number;
+    if (body.amount_paise !== undefined) {
+      amount_paise = Number(body.amount_paise);
+    } else if (body.amount !== undefined) {
+      amount_paise = Math.round(Number(body.amount) * 100);
+    } else {
+      return c.json({ error: 'Amount must be greater than 0' }, 400);
+    }
+
     const amount_expr = body.amount_expr ? String(body.amount_expr).trim() : null;
     const description = String(body.description || '').trim();
     const category = String(body.category || 'Others').trim();
@@ -149,7 +319,7 @@ expensesRouter.post('/api/expenses', async (c) => {
     const date = String(body.date || new Date().toISOString().split('T')[0]).trim();
     const notes = body.notes ? String(body.notes).trim() : null;
 
-    if (isNaN(amount) || amount <= 0) {
+    if (isNaN(amount_paise) || amount_paise <= 0 || !Number.isInteger(amount_paise)) {
       return c.json({ error: 'Amount must be greater than 0' }, 400);
     }
     if (!description) {
@@ -157,7 +327,6 @@ expensesRouter.post('/api/expenses', async (c) => {
     }
 
     const id = crypto.randomUUID();
-    const amount_paise = Math.round(amount * 100);
     const nowIso = new Date().toISOString();
 
     const stmt = db
@@ -190,7 +359,7 @@ expensesRouter.post('/api/expenses', async (c) => {
       after: newRow,
     });
 
-    return c.json({ success: true, id, activity_id: activityId }, 201);
+    return c.json({ success: true, activity_id: activityId, ...newRow }, 201);
   } catch (err: any) {
     return c.json({ error: err.message || 'Failed to create expense' }, 500);
   }
@@ -215,7 +384,15 @@ expensesRouter.put('/api/expenses/:id', async (c) => {
 
   try {
     const body = await c.req.json();
-    const amount = Number(body.amount);
+    let amount_paise: number;
+    if (body.amount_paise !== undefined) {
+      amount_paise = Number(body.amount_paise);
+    } else if (body.amount !== undefined) {
+      amount_paise = Math.round(Number(body.amount) * 100);
+    } else {
+      return c.json({ error: 'Amount must be greater than 0' }, 400);
+    }
+
     const description = String(body.description || '').trim();
     const category = String(body.category || 'Others').trim();
     const paymentMethod = String(body.payment_method || 'UPI').trim();
@@ -223,14 +400,13 @@ expensesRouter.put('/api/expenses/:id', async (c) => {
     const notes = body.notes !== undefined ? (body.notes ? String(body.notes).trim() : null) : existing.notes;
     const amount_expr = body.amount_expr !== undefined ? (body.amount_expr ? String(body.amount_expr).trim() : null) : existing.amount_expr;
 
-    if (isNaN(amount) || amount <= 0) {
+    if (isNaN(amount_paise) || amount_paise <= 0 || !Number.isInteger(amount_paise)) {
       return c.json({ error: 'Amount must be greater than 0' }, 400);
     }
     if (!description) {
       return c.json({ error: 'Description is required' }, 400);
     }
 
-    const amount_paise = Math.round(amount * 100);
     const nowIso = new Date().toISOString();
 
     const stmt = db
@@ -272,7 +448,7 @@ expensesRouter.put('/api/expenses/:id', async (c) => {
       after: updatedRow,
     });
 
-    return c.json({ success: true, activity_id: activityId });
+    return c.json({ success: true, activity_id: activityId, ...updatedRow });
   } catch (err: any) {
     return c.json({ error: err.message || 'Failed to update expense' }, 500);
   }
@@ -320,24 +496,75 @@ expensesRouter.get('/api/export', async (c) => {
   }
 
   const dateRange = c.req.query('date_range') || 'all';
-  const whereClauses: string[] = ['deleted_at IS NULL'];
-  const params: any[] = [];
+  const includeGroupsParam = c.req.query('include_groups');
+  const userWantsGroups = includeGroupsParam === undefined || (includeGroupsParam !== '0' && includeGroupsParam !== 'false');
+  const includeGroups = userWantsGroups && (await hasGroupTables(db));
+
+  const personalWhere: string[] = ['deleted_at IS NULL'];
+  const personalParams: any[] = [];
+  const groupWhere: string[] = ["s.person_id = 'me'", 'ge.deleted_at IS NULL', 'g.deleted_at IS NULL'];
+  const groupParams: any[] = [];
 
   const { clause: dateClause, params: dateParams } = getDateRangeClause(dateRange);
   if (dateClause) {
-    whereClauses.push(dateClause);
-    params.push(...dateParams);
+    personalWhere.push(dateClause);
+    personalParams.push(...dateParams);
+
+    groupWhere.push(dateClause.replace(/\bdate\b/g, 'ge.date'));
+    groupParams.push(...dateParams);
   }
 
-  const whereSql = `WHERE ${whereClauses.join(' AND ')}`;
-  const sql = `SELECT * FROM expenses ${whereSql} ORDER BY date DESC, created_at DESC`;
-  const { results: expenses } = await db.prepare(sql).bind(...params).all<ExpenseRow>();
+  let sql = '';
+  let params: any[] = [];
+
+  if (includeGroups) {
+    sql = `
+      SELECT 
+        id, amount_paise, description, category, payment_method, date, notes, created_at, 'personal' AS source
+      FROM expenses
+      WHERE ${personalWhere.join(' AND ')}
+
+      UNION ALL
+
+      SELECT 
+        ge.id AS id, s.amount_paise AS amount_paise, ge.description AS description, ge.category AS category,
+        'Group' AS payment_method, ge.date AS date, ge.notes AS notes, ge.created_at AS created_at, 'group' AS source
+      FROM expense_shares s
+      JOIN group_expenses ge ON s.expense_id = ge.id
+      JOIN groups g ON ge.group_id = g.id
+      WHERE ${groupWhere.join(' AND ')}
+
+      ORDER BY date DESC, created_at DESC
+    `;
+    params = [...personalParams, ...groupParams];
+  } else {
+    sql = `
+      SELECT 
+        id, amount_paise, description, category, payment_method, date, notes, created_at, 'personal' AS source
+      FROM expenses
+      WHERE ${personalWhere.join(' AND ')}
+      ORDER BY date DESC, created_at DESC
+    `;
+    params = personalParams;
+  }
+
+  const { results: expenses } = await db.prepare(sql).bind(...params).all<{
+    id: string;
+    amount_paise: number;
+    description: string;
+    category: string;
+    payment_method: string;
+    date: string;
+    notes: string | null;
+    created_at: string;
+    source: string;
+  }>();
 
   // Generate CSV Header & Rows
-  const csvHeaders = ['ID', 'Date', 'Amount (INR)', 'Description', 'Category', 'Payment Method', 'Notes', 'Created At'];
+  const csvHeaders = ['ID', 'Date', 'Amount (INR)', 'Description', 'Category', 'Payment Method', 'Notes', 'Created At', 'Source'];
   const csvRows = [csvHeaders.join(',')];
 
-  expenses.forEach((item) => {
+  (expenses || []).forEach((item) => {
     const escape = (val: any) => `"${String(val || '').replace(/"/g, '""')}"`;
     csvRows.push([
       escape(item.id),
@@ -348,6 +575,7 @@ expensesRouter.get('/api/export', async (c) => {
       escape(item.payment_method),
       escape(item.notes || ''),
       escape(item.created_at),
+      escape(item.source),
     ].join(','));
   });
 

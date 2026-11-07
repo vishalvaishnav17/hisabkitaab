@@ -1,6 +1,7 @@
 export interface Expense {
   id: string;
-  amount: number;
+  amount_paise: number;
+  amount?: number;
   amount_expr?: string | null;
   description: string;
   category: string;
@@ -9,16 +10,23 @@ export interface Expense {
   notes?: string | null;
   created_at?: string;
   updated_at?: string;
+  source?: 'personal' | 'group';
+  group_id?: string | null;
+  group_name?: string | null;
+  group_expense_id?: string | null;
 }
 
 export interface Stats {
   totalSpend: number;
+  total_spend_paise?: number;
   count: number;
   monthSpend: number;
+  month_spend_paise?: number;
   dailyAverage: number;
-  topCategory: { category: string; amount?: number; total?: number } | null;
-  categoryBreakdown: { category: string; total: number }[];
-  dailyTrends: { date: string; amount: number }[];
+  daily_average_paise?: number;
+  topCategory: { category: string; amount?: number; total?: number; amount_paise?: number; total_paise?: number } | null;
+  categoryBreakdown: { category: string; total: number; amount?: number; total_paise?: number; amount_paise?: number }[];
+  dailyTrends: { date: string; amount: number; amount_paise?: number }[];
 }
 
 export interface ExpenseFilterParams {
@@ -26,10 +34,12 @@ export interface ExpenseFilterParams {
   category?: string;
   payment_method?: string;
   date_range?: string;
+  include_groups?: string;
 }
 
 export interface ExpensePayload {
-  amount: number;
+  amount_paise: number;
+  amount?: number;
   amount_expr?: string | null;
   description: string;
   category: string;
@@ -68,6 +78,32 @@ export interface ActivityListResponse {
   next_cursor: string | null;
 }
 
+export interface FriendBalanceGroup {
+  group_id: string;
+  group_name: string;
+  name: string;
+  net_paise: number;
+}
+
+export interface FriendBalance {
+  id: string;
+  name: string;
+  upi_vpa: string | null;
+  phone: string | null;
+  net_paise: number;
+  groups: FriendBalanceGroup[];
+}
+
+export interface GroupItem {
+  id: string;
+  name: string;
+  emoji: string | null;
+  kind: string;
+  member_count: number;
+  my_net_paise: number;
+  last_activity_at: string;
+}
+
 export function redirectIfSignedOut(res: Response): boolean {
   if (res.status === 401 || res.status === 403) {
     window.location.assign('/sign-in?reason=' + (res.status === 403 ? 'not-allowed' : 'signed-out'));
@@ -84,6 +120,7 @@ export async function fetchExpensesApi(
   if (params.category) query.set('category', params.category);
   if (params.payment_method) query.set('payment_method', params.payment_method);
   if (params.date_range) query.set('date_range', params.date_range);
+  if (params.include_groups !== undefined) query.set('include_groups', params.include_groups);
 
   const res = await fetch('/api/expenses?' + query.toString());
   if (redirectIfSignedOut(res)) return null;
@@ -177,6 +214,58 @@ export async function restoreActivityApi(
   return res.json();
 }
 
-export function getExportCsvUrl(dateRange: string): string {
-  return '/api/export?date_range=' + encodeURIComponent(dateRange);
+export async function fetchFriendsBalancesApi(): Promise<FriendBalance[] | null> {
+  const res = await fetch('/api/friends/balances');
+  if (redirectIfSignedOut(res)) return null;
+  if (!res.ok) throw new Error('Failed to fetch friends balances');
+  return res.json();
+}
+
+export async function fetchGroupsApi(): Promise<GroupItem[] | null> {
+  const res = await fetch('/api/groups');
+  if (redirectIfSignedOut(res)) return null;
+  if (!res.ok) throw new Error('Failed to fetch groups');
+  return res.json();
+}
+
+export async function updatePersonApi(
+  id: string,
+  payload: { name?: string; upi_vpa?: string | null; phone?: string | null }
+): Promise<{ success: boolean } | null> {
+  const res = await fetch('/api/people/' + encodeURIComponent(id), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (redirectIfSignedOut(res)) return null;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to update person');
+  }
+  return res.json();
+}
+
+export async function createPersonApi(payload: {
+  name: string;
+  upi_vpa?: string | null;
+  phone?: string | null;
+}): Promise<{ success: boolean; id: string } | null> {
+  const res = await fetch('/api/people', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (redirectIfSignedOut(res)) return null;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to add friend');
+  }
+  return res.json();
+}
+
+export function getExportCsvUrl(dateRange: string, includeGroups = true): string {
+  const query = new URLSearchParams();
+  query.set('date_range', dateRange);
+  query.set('include_groups', includeGroups ? '1' : '0');
+  return '/api/export?' + query.toString();
 }
