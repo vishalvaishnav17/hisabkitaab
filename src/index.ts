@@ -75,10 +75,11 @@ app.use('*', async (c, next) => {
 // Enable CORS
 app.use('*', cors());
 
-// Helper to ensure tables exist
+// D1's exec() runs each physical line as its own statement. A CREATE TABLE
+// split across lines throws "incomplete input" and the list route 500s.
 async function ensureTables(db: D1Database) {
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS expenses (
+  await db.batch([
+    db.prepare(`CREATE TABLE IF NOT EXISTS expenses (
       id TEXT PRIMARY KEY,
       amount REAL NOT NULL,
       description TEXT NOT NULL,
@@ -88,10 +89,10 @@ async function ensureTables(db: D1Database) {
       notes TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);
-    CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category);
-  `);
+    )`),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category)'),
+  ]);
 }
 
 // Serve Frontend UI
