@@ -6,18 +6,21 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "db:init:local": "wrangler d1 execute hisabkitaab-db --local --file=schema.sql",
+    "db:migrate:local": "wrangler d1 migrations apply hisabkitaab-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply hisabkitaab-db --remote",
     "db:seed:local": "wrangler d1 execute hisabkitaab-db --local --file=seed.sql",
-    "db:init:remote": "wrangler d1 execute hisabkitaab-db --remote --file=schema.sql",
-    "typecheck": "tsc --noEmit"
+    "build": "bun build src/client/index.html --outdir dist --minify && cp -r public/. dist/",
+    "typecheck": "tsc --noEmit && tsc -p src/client/tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261107.1",
     "@types/bun": "latest",
+    "@types/qrcode-generator": "^1.0.6",
     "typescript": "^7.0.2",
     "wrangler": "^4.158.0"
   },
   "dependencies": {
-    "hono": "^4.13.16"
+    "hono": "^4.13.16",
+    "qrcode-generator": "^2.0.4"
   }
 }
