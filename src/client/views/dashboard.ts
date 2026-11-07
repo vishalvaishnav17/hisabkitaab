@@ -6,6 +6,7 @@ import {
   Stats,
 } from '../api';
 import { formatINR, escapeHtml } from '../format';
+import { formatExpr } from '../../split/amount';
 import { openExpenseModal } from '../components/expense-sheet';
 import { showToast } from '../components/toast';
 
@@ -218,6 +219,19 @@ export function renderTable(expenses: Expense[]): void {
         ${escapeHtml(item.category)}
       </span>`;
 
+    const formatDisplayExpr = (expr?: string | null): string => {
+      if (!expr) return '';
+      try {
+        return formatExpr(expr);
+      } catch {
+        return expr;
+      }
+    };
+
+    const exprHtml = item.amount_expr
+      ? `<div class="text-[11px] text-zinc-400 font-mono mt-0.5">${escapeHtml(formatDisplayExpr(item.amount_expr))}</div>`
+      : '';
+
     const tr = document.createElement('tr');
     tr.className = 'hover:bg-surface2/60 transition-colors group';
     tr.innerHTML = `
@@ -232,6 +246,7 @@ export function renderTable(expenses: Expense[]): void {
       </td>
       <td class="py-3 px-4 text-right whitespace-nowrap">
         <span class="font-semibold text-white mono">${formatINR(item.amount)}</span>
+        ${exprHtml}
       </td>
       <td class="py-3 px-4 text-right whitespace-nowrap">
         <div class="flex items-center justify-end gap-1.5 opacity-80 group-hover:opacity-100">
@@ -254,7 +269,10 @@ export function renderTable(expenses: Expense[]): void {
           <div class="font-medium text-white text-sm truncate">${escapeHtml(item.description)}</div>
           ${notes}
         </div>
-        <div class="font-semibold text-white mono shrink-0">${formatINR(item.amount)}</div>
+        <div class="text-right shrink-0">
+          <div class="font-semibold text-white mono">${formatINR(item.amount)}</div>
+          ${exprHtml}
+        </div>
       </div>
       <div class="mt-2 flex items-center gap-1.5 min-w-0">
         ${categoryPill}
