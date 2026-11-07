@@ -101,6 +101,10 @@
         </div>
 
         <div class="flex items-center gap-2 shrink-0">
+          <a href="#/settings" id="headerSettingsBtn" aria-label="Settings" class="flex items-center justify-center h-11 w-11 text-zinc-400 hover:text-white bg-surface2 hover:bg-zinc-800 border border-borderDark rounded-lg transition-all">
+            <i data-lucide="settings" class="w-4 h-4"></i>
+          </a>
+
           <button id="exportCsvBtn" aria-label="Export CSV" class="flex items-center justify-center gap-1.5 h-11 w-11 sm:w-auto sm:px-3 text-xs font-medium bg-surface2 hover:bg-zinc-800 text-zinc-300 border border-borderDark rounded-lg transition-all">
             <i data-lucide="download" class="w-4 h-4"></i>
             <span class="hidden sm:inline">Export CSV</span>
@@ -314,6 +318,9 @@
 
       <!-- View: Activity -->
       <div id="view-activity" class="hidden"></div>
+
+      <!-- View: Settings -->
+      <div id="view-settings" class="hidden"></div>
     </main>
 
     <!-- Footer -->

@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings } from '../env';
 import { getRestorer, logged } from '../db/activity';
+import '../services/settings';
 
 interface ActivityRow {
   id: string;
@@ -196,12 +197,18 @@ activityRouter.post('/api/activity/:id/restore', async (c) => {
         .all();
       current.participant_ids = participants.map((p: any) => p.person_id);
     }
+  } else if (entry.entity_type === 'setting') {
+    current = await db
+      .prepare('SELECT * FROM settings WHERE key = ?')
+      .bind(entry.entity_id)
+      .first();
   }
 
   const stmts = await restorer(db, snapshot);
 
-  const label = snapshot.title || snapshot.description || snapshot.name || entry.entity_type;
+  const label = snapshot.title || snapshot.description || snapshot.name || (snapshot.key ? `setting ${snapshot.key}` : entry.entity_type);
   const summary = `Restored ${label}`;
+
 
   const restoreActivityId = await logged(db, stmts, {
     entity_type: entry.entity_type,

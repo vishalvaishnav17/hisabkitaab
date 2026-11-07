@@ -276,3 +276,18 @@ export async function createGroupTransferApi(
   return res.json();
 }
 
+
+export async function fetchGroupStatementApi(
+  groupId: string,
+  personId: string
+): Promise<any | null> {
+  const res = await fetch(
+    `/api/groups/${encodeURIComponent(groupId)}/statement/${encodeURIComponent(personId)}`
+  );
+  if (redirectIfSignedOut(res)) return null;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to fetch group statement');
+  }
+  return res.json();
+}

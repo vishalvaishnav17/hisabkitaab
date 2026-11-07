@@ -1,6 +1,6 @@
 export type TabName = 'personal' | 'groups' | 'friends' | 'bills' | 'activity';
 
-export function setActiveTab(tab: TabName): void {
+export function setActiveTab(tab: TabName | null | ''): void {
   const tabs = document.querySelectorAll<HTMLElement>('#bottomTabBar [data-tab]');
   tabs.forEach((t) => {
     const isCurrent = t.dataset.tab === tab;

@@ -15,6 +15,7 @@ import { openGroupSettingsSheet } from './settings-sheet';
 import { openTransferSheet, openTransferDetailModal } from './transfer-sheet';
 import { fetchBillsApi, updateBillsTabBadge, RecurringBillItem } from '../../bills-api';
 import { openPayBillConfirm } from '../../components/bill-sheet';
+import { shareFriendNudge, shareGroupSummaryNudge } from './share-nudge';
 import {
   GroupDetailResponse,
   PersonItem,
@@ -200,6 +201,16 @@ export function renderGroupDetail(container: HTMLElement, groupId: string): void
 
           <button
             type="button"
+            id="groupShareSummaryBtn"
+            class="h-10 px-3 text-xs font-medium bg-surface2 hover:bg-zinc-800 text-zinc-300 border border-borderDark rounded-xl flex items-center gap-1.5 active:scale-95 transition-all"
+            aria-label="Share summary"
+          >
+            <i data-lucide="share-2" class="w-4 h-4"></i>
+            <span class="hidden sm:inline">Share summary</span>
+          </button>
+
+          <button
+            type="button"
             id="groupSettingsBtn"
             class="h-10 w-10 flex items-center justify-center rounded-xl bg-surface2 hover:bg-zinc-800 text-zinc-300 border border-borderDark active:scale-95 transition-all"
             aria-label="Group settings"
@@ -293,6 +304,12 @@ export function renderGroupDetail(container: HTMLElement, groupId: string): void
           refreshGroupData();
         },
       });
+    });
+
+    // Attach Share summary button listener
+    const shareSummaryBtn = contentEl.querySelector('#groupShareSummaryBtn');
+    shareSummaryBtn?.addEventListener('click', () => {
+      shareGroupSummaryNudge(groupId);
     });
 
     // Attach Settings button listener
@@ -637,20 +654,38 @@ export function renderGroupDetail(container: HTMLElement, groupId: string): void
             </div>
           </div>
 
-          ${
-            !m.is_me && !isArchived
-              ? `
-            <button
-              type="button"
-              data-remove-person-id="${escapeHtml(m.person_id)}"
-              data-person-name="${escapeHtml(m.name)}"
-              class="remove-member-btn h-9 px-3 text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-xl border border-transparent hover:border-rose-500/20 active:scale-95 transition-all"
-            >
-              Remove
-            </button>
-          `
-              : ''
-          }
+          <div class="flex items-center gap-1.5 shrink-0">
+            ${
+              !m.is_me
+                ? `
+              <button
+                type="button"
+                data-share-person-id="${escapeHtml(m.person_id)}"
+                class="share-member-btn h-9 px-2.5 text-xs font-semibold text-zinc-300 hover:text-white bg-surface2 hover:bg-zinc-800 rounded-xl border border-borderDark active:scale-95 transition-all flex items-center gap-1.5"
+                title="Share card"
+              >
+                <i data-lucide="share-2" class="w-3.5 h-3.5 text-emerald-400"></i>
+                <span class="hidden min-[380px]:inline">Share</span>
+              </button>
+            `
+                : ''
+            }
+            ${
+              !m.is_me && !isArchived
+                ? `
+              <button
+                type="button"
+                data-remove-person-id="${escapeHtml(m.person_id)}"
+                data-person-name="${escapeHtml(m.name)}"
+                class="remove-member-btn h-9 px-3 text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-xl border border-transparent hover:border-rose-500/20 active:scale-95 transition-all"
+              >
+                Remove
+              </button>
+            `
+                : ''
+            }
+          </div>
+
         </div>
       `;
     }
@@ -798,6 +833,16 @@ export function renderGroupDetail(container: HTMLElement, groupId: string): void
           showToast(err.message || 'Failed to remove member', 'error');
           btn.disabled = false;
           btn.textContent = 'Remove';
+        }
+      });
+    });
+
+    // Share member nudge card buttons
+    container.querySelectorAll<HTMLButtonElement>('.share-member-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const pid = btn.dataset.sharePersonId;
+        if (pid) {
+          shareFriendNudge(groupId, pid);
         }
       });
     });
