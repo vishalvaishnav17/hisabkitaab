@@ -60,7 +60,7 @@ export function openExpenseModal(expense?: Expense): void {
     if (expense.amount_expr) {
       amountInput.setValue(null, expense.amount_expr);
     } else {
-      amountInput.setValue(Math.round(expense.amount * 100), null);
+      amountInput.setValue(expense.amount_paise ?? Math.round((expense.amount || 0) * 100), null);
     }
     descInput.value = expense.description;
     catInput.value = expense.category;
@@ -132,7 +132,8 @@ export function initExpenseSheet(onSaveSuccess: () => void): void {
 
       const id = idInput?.value || '';
       const payload: ExpensePayload = {
-        amount: paise / 100,
+        amount_paise: paise,
+        amount: paise,
         amount_expr: expr,
         description: descInput.value.trim(),
         category: catInput.value,
