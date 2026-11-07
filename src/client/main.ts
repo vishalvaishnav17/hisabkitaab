@@ -59,6 +59,18 @@ export function registerRoute(path: string, handler: RouteHandler): void {
 export function handleRoute(): void {
   const rawHash = window.location.hash;
   const hash = !rawHash || rawHash === '#' ? '#/' : rawHash;
+  if (hash.startsWith('#/groups/')) {
+    const groupId = hash.slice('#/groups/'.length).trim();
+    if (groupId) {
+      const container = switchView('view-groups');
+      setActiveTab('groups');
+      if (container) renderGroups(container, groupId);
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
+      return;
+    }
+  }
   const handler = routes[hash] || routes['#/'];
   if (handler) {
     handler();
