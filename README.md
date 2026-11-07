@@ -33,10 +33,10 @@ Designed to be hosted on `expenses.vishalvaishnav.cc`.
    bun install
    ```
 
-2. **Apply Local Database Schema & Seed**:
+2. **Apply Local Database Migrations & Seed**:
    ```bash
-   bun x wrangler d1 execute hisabkitaab-db --local --file=schema.sql
-   bun x wrangler d1 execute hisabkitaab-db --local --file=seed.sql
+   bun run db:migrate:local
+   bun run db:seed:local
    ```
 
 3. **Start Local Worker**:
@@ -56,9 +56,9 @@ Designed to be hosted on `expenses.vishalvaishnav.cc`.
    ```
    Copy the generated `database_id` into `wrangler.jsonc`.
 
-2. **Apply Schema to Remote Database**:
+2. **Apply Migrations to Remote Database**:
    ```bash
-   bun x wrangler d1 execute hisabkitaab-db --remote --file=schema.sql
+   bun run db:migrate:remote
    ```
 
 3. **Deploy Worker & Custom Subdomain**:
