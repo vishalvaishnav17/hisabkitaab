@@ -13,10 +13,15 @@ export function formatISODateUTC(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+/**
+ * Yearly anchor: the date's day of the year in the leap reference year 2000
+ * (1..366), so the same month/day always maps to the same anchor whatever the
+ * year. Using the real year would drift a day around Feb 29.
+ */
 export function getDayOfYear(dateStr: string): number {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const start = Date.UTC(y, 0, 1);
-  const current = Date.UTC(y, m - 1, d);
+  const [, m, d] = dateStr.split('-').map(Number);
+  const start = Date.UTC(2000, 0, 1);
+  const current = Date.UTC(2000, m - 1, d);
   return Math.floor((current - start) / 86400000) + 1;
 }
 
@@ -56,32 +61,14 @@ export function nextDueAfter(
   }
 
   if (cadence === 'yearly') {
-    if (anchor_day > 366) {
-      const targetMonth = Math.floor(anchor_day / 100);
-      const targetDay = anchor_day % 100;
-      const maxD = getLastDayOfMonth(y, targetMonth);
-      const clampedD = Math.min(targetDay, maxD);
-      const candidate = `${y}-${pad(targetMonth)}-${pad(clampedD)}`;
-      if (candidate > date) return candidate;
-
-      const nextMaxD = getLastDayOfMonth(y + 1, targetMonth);
-      const nextClampedD = Math.min(targetDay, nextMaxD);
-      return `${y + 1}-${pad(targetMonth)}-${pad(nextClampedD)}`;
-    }
-
-    const daysInY = isLeapYear(y) ? 366 : 365;
-    const clampedDayY = Math.min(anchor_day, daysInY);
-    const candObj = new Date(Date.UTC(y, 0, clampedDayY));
-    const candStr = formatISODateUTC(candObj);
-    if (candStr > date) {
-      return candStr;
-    }
-
-    const nextY = y + 1;
-    const daysInNextY = isLeapYear(nextY) ? 366 : 365;
-    const clampedDayNextY = Math.min(anchor_day, daysInNextY);
-    const nextCandObj = new Date(Date.UTC(nextY, 0, clampedDayNextY));
-    return formatISODateUTC(nextCandObj);
+    // anchor_day is a day of the leap reference year 2000 (see getDayOfYear).
+    const ref = new Date(Date.UTC(2000, 0, Math.min(Math.max(anchor_day, 1), 366)));
+    const targetMonth = ref.getUTCMonth() + 1;
+    const targetDay = ref.getUTCDate();
+    const inYear = (year: number) =>
+      `${year}-${pad(targetMonth)}-${pad(Math.min(targetDay, getLastDayOfMonth(year, targetMonth)))}`;
+    const candidate = inYear(y);
+    return candidate > date ? candidate : inYear(y + 1);
   }
 
   throw new Error(`Unsupported cadence: ${cadence}`);

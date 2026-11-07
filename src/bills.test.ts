@@ -101,9 +101,17 @@ describe('nextDueAfter unit tests', () => {
       expect(nextDueAfter('2024-12-31', 'yearly', 366)).toBe('2025-12-31');
     });
 
-    test('yearly leap year day 60 (Feb 29) advances to Mar 1 in non-leap year', () => {
-      const doy = getDayOfYear('2024-02-29'); // 60
-      expect(nextDueAfter('2024-02-29', 'yearly', doy)).toBe('2025-03-01');
+    test('yearly Feb 29 clamps to Feb 28 in non-leap years and returns in leap years', () => {
+      const doy = getDayOfYear('2024-02-29');
+      expect(nextDueAfter('2024-02-29', 'yearly', doy)).toBe('2025-02-28');
+      expect(nextDueAfter('2027-02-28', 'yearly', doy)).toBe('2028-02-29');
+    });
+
+    test('yearly anchor does not drift across leap years', () => {
+      const doy = getDayOfYear('2026-11-07');
+      expect(nextDueAfter('2027-11-07', 'yearly', doy)).toBe('2028-11-07');
+      expect(nextDueAfter('2028-11-07', 'yearly', doy)).toBe('2029-11-07');
+      expect(nextDueAfter('2027-03-01', 'yearly', getDayOfYear('2027-03-01'))).toBe('2028-03-01');
     });
   });
 

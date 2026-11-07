@@ -39,7 +39,11 @@ billsRouter.get('/api/bills', async (c) => {
   const allBills = billsRes.results || [];
 
   const participantsRes = await db
-    .prepare('SELECT bill_id, person_id FROM recurring_bill_participants')
+    .prepare(
+      `SELECT p.bill_id, p.person_id FROM recurring_bill_participants p
+       JOIN recurring_bills b ON b.id = p.bill_id
+       WHERE b.deleted_at IS NULL AND b.active = 1`
+    )
     .all<{ bill_id: string; person_id: string }>();
 
   const participantsByBill = new Map<string, string[]>();
@@ -380,6 +384,9 @@ billsRouter.put('/api/bills/:id', async (c) => {
           }
         }
         participantIds = body.participant_ids;
+      } else if (group_id !== existing.group_id) {
+        // Moved to another group: the old participants don't belong here.
+        participantIds = Array.from(activeMemberIds);
       }
     } else {
       paid_by = null;
