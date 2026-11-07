@@ -7,6 +7,7 @@ import {
   deleteGroupExpense,
   getGroupBalances,
   getGroupLedger,
+  getGroupStatement,
   GroupRow,
   ServiceError,
   updateGroupExpense,
@@ -260,6 +261,27 @@ groupsRouter.get('/api/groups/:id', async (c) => {
       return c.json({ error: err.message }, err.status as any);
     }
     return c.json({ error: err.message || 'Failed to load group' }, 500);
+  }
+});
+
+// GET /api/groups/:id/statement/:personId
+groupsRouter.get('/api/groups/:id/statement/:personId', async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 Database binding not configured' }, 500);
+  }
+
+  const id = c.req.param('id');
+  const personId = c.req.param('personId');
+
+  try {
+    const res = await getGroupStatement(db, id, personId);
+    return c.json(res);
+  } catch (err: any) {
+    if (err instanceof ServiceError) {
+      return c.json({ error: err.message }, err.status as any);
+    }
+    return c.json({ error: err.message || 'Failed to get group statement' }, 500);
   }
 });
 

@@ -252,7 +252,165 @@ export async function getGroupBalances(db: D1Database, groupId: string): Promise
   };
 }
 
+export interface StatementExpenseItem {
+  id: string;
+  description: string;
+  date: string;
+  total: number;
+  total_paise: number;
+  share: number;
+  share_paise: number;
+  paid_by: string;
+  paid_by_name: string;
+}
+
+export interface StatementTransferItem {
+  id: string;
+  from_person: string;
+  from_name: string;
+  to_person: string;
+  to_name: string;
+  amount_paise: number;
+  date: string;
+}
+
+export interface StatementSettlementItem {
+  from: string;
+  from_name: string;
+  to: string;
+  to_name: string;
+  amount_paise: number;
+}
+
+export interface GroupStatementResult {
+  group: {
+    id: string;
+    name: string;
+    emoji: string | null;
+  };
+  group_name: string;
+  person: {
+    id: string;
+    name: string;
+    upi_vpa: string | null;
+    phone: string | null;
+    is_me: boolean;
+  };
+  net_balance_paise: number;
+  expenses: StatementExpenseItem[];
+  transfers: StatementTransferItem[];
+  settlements: StatementSettlementItem[];
+}
+
+export async function getGroupStatement(
+  db: D1Database,
+  groupId: string,
+  personId: string
+): Promise<GroupStatementResult> {
+  const ledger = await getGroupLedger(db, groupId);
+
+  const member = ledger.members.find((m) => m.person_id === personId);
+  if (!member) {
+    throw new ServiceError('Person not found in group', 404);
+  }
+
+  const peopleMap = new Map<string, string>();
+  for (const m of ledger.members) {
+    peopleMap.set(m.person_id, m.name);
+  }
+
+  const expensesForBalances: Expense[] = ledger.expenses.map((e) => ({
+    paid_by: e.paid_by,
+    amount_paise: e.amount_paise,
+    shares: (e.shares || []).map((s) => ({
+      person_id: s.person_id,
+      amount_paise: s.amount_paise,
+    })),
+  }));
+
+  const transfersForBalances: Transfer[] = ledger.transfers.map((t) => ({
+    from_person: t.from_person,
+    to_person: t.to_person,
+    amount_paise: t.amount_paise,
+  }));
+
+  const balancesMap = computeBalances(expensesForBalances, transfersForBalances);
+  for (const m of ledger.members) {
+    if (!balancesMap.has(m.person_id)) {
+      balancesMap.set(m.person_id, 0);
+    }
+  }
+
+  const simplifyDebts = ledger.group.simplify_debts === 1;
+  const allSettlements = simplifyDebts
+    ? minimizeSettlements(balancesMap)
+    : pairwiseDebts(expensesForBalances, transfersForBalances);
+
+  const net_balance_paise = balancesMap.get(personId) ?? 0;
+
+  const expenses: StatementExpenseItem[] = [];
+  for (const e of ledger.expenses) {
+    const s = (e.shares || []).find((sh) => sh.person_id === personId);
+    if (s) {
+      expenses.push({
+        id: e.id,
+        description: e.description,
+        date: e.date,
+        total: e.amount_paise,
+        total_paise: e.amount_paise,
+        share: s.amount_paise,
+        share_paise: s.amount_paise,
+        paid_by: e.paid_by,
+        paid_by_name: peopleMap.get(e.paid_by) || e.paid_by,
+      });
+    }
+  }
+
+  const transfers: StatementTransferItem[] = ledger.transfers
+    .filter((t) => t.from_person === personId || t.to_person === personId)
+    .map((t) => ({
+      id: t.id,
+      from_person: t.from_person,
+      from_name: peopleMap.get(t.from_person) || t.from_name || t.from_person,
+      to_person: t.to_person,
+      to_name: peopleMap.get(t.to_person) || t.to_name || t.to_person,
+      amount_paise: t.amount_paise,
+      date: t.date,
+    }));
+
+  const settlements: StatementSettlementItem[] = allSettlements
+    .filter((s) => s.from === personId || s.to === personId)
+    .map((s) => ({
+      from: s.from,
+      from_name: peopleMap.get(s.from) || s.from,
+      to: s.to,
+      to_name: peopleMap.get(s.to) || s.to,
+      amount_paise: s.amount_paise,
+    }));
+
+  return {
+    group: {
+      id: ledger.group.id,
+      name: ledger.group.name,
+      emoji: ledger.group.emoji,
+    },
+    group_name: ledger.group.name,
+    person: {
+      id: member.person_id,
+      name: member.name,
+      upi_vpa: member.upi_vpa,
+      phone: member.phone,
+      is_me: member.is_me === 1,
+    },
+    net_balance_paise,
+    expenses,
+    transfers,
+    settlements,
+  };
+}
+
 export interface BuildGroupExpenseResult {
+
   id: string;
   statements: D1PreparedStatement[];
   activityEntry: ActivityEntryInput;

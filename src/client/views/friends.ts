@@ -8,6 +8,7 @@ import {
 } from '../api';
 import { formatPaise, escapeHtml } from '../format';
 import { showToast } from '../components/toast';
+import { shareFriendNudge } from './groups/share-nudge';
 
 let cachedFriends: FriendBalance[] = [];
 let cachedGroups: GroupItem[] = [];
@@ -204,6 +205,19 @@ function renderFriendsUI(container: HTMLElement): void {
         </form>
       </div>
     </div>
+
+    <!-- Pick Group Modal (when friend is in multiple groups) -->
+    <div id="pickGroupModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-end sm:items-center justify-center sm:p-4">
+      <div class="bg-surface border border-zinc-800 w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-5 shadow-2xl relative max-h-[80dvh] flex flex-col">
+        <div class="flex items-center justify-between pb-3 border-b border-borderDark">
+          <h3 id="pickGroupModalTitle" class="text-base font-semibold text-white">Select Group to Share</h3>
+          <button type="button" id="closePickGroupModalBtn" aria-label="Close" class="text-zinc-500 hover:text-zinc-300 h-10 w-10 flex items-center justify-center rounded-lg">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+        <div id="pickGroupList" class="my-3 space-y-2 overflow-y-auto"></div>
+      </div>
+    </div>
   `;
 
   attachFriendsEventListeners(container);
@@ -286,16 +300,29 @@ function renderFriendCard(friend: FriendBalance): string {
                 }
 
                 return `
-                  <a href="#/groups/${encodeURIComponent(g.group_id)}"
-                     class="flex items-center justify-between p-2.5 rounded-xl bg-pitch hover:bg-zinc-900 border border-borderDark hover:border-zinc-700 transition-colors text-xs group">
-                    <div class="flex items-center gap-2 min-w-0">
-                      <span class="font-medium text-zinc-200 group-hover:text-emerald-400 transition-colors truncate">${escapeHtml(g.group_name || g.name)}</span>
-                      <i data-lucide="arrow-up-right" class="w-3.5 h-3.5 text-zinc-500 group-hover:text-emerald-400 shrink-0"></i>
-                    </div>
-                    <div class="text-right shrink-0">
-                      ${gBalanceText}
-                    </div>
-                  </a>
+                  <div class="flex items-center gap-2">
+                    <a href="#/groups/${encodeURIComponent(g.group_id)}"
+                       class="flex-1 flex items-center justify-between p-2.5 rounded-xl bg-pitch hover:bg-zinc-900 border border-borderDark hover:border-zinc-700 transition-colors text-xs group">
+                      <div class="flex items-center gap-2 min-w-0">
+                        <span class="font-medium text-zinc-200 group-hover:text-emerald-400 transition-colors truncate">${escapeHtml(g.group_name || g.name)}</span>
+                        <i data-lucide="arrow-up-right" class="w-3.5 h-3.5 text-zinc-500 group-hover:text-emerald-400 shrink-0"></i>
+                      </div>
+                      <div class="text-right shrink-0">
+                        ${gBalanceText}
+                      </div>
+                    </a>
+                    <button
+                      type="button"
+                      data-share-friend-group="${escapeHtml(g.group_id)}"
+                      data-share-friend-id="${escapeHtml(friend.id)}"
+                      aria-label="Share card for ${escapeHtml(g.group_name || g.name)}"
+                      class="h-10 px-2.5 flex items-center justify-center gap-1.5 text-xs font-semibold text-zinc-300 hover:text-white bg-surface2 hover:bg-zinc-800 rounded-xl border border-borderDark transition-colors shrink-0 active:scale-95"
+                      title="Share card for this group"
+                    >
+                      <i data-lucide="share-2" class="w-3.5 h-3.5 text-emerald-400"></i>
+                      <span class="hidden min-[420px]:inline">Share</span>
+                    </button>
+                  </div>
                 `;
               })
               .join('')}
@@ -316,8 +343,12 @@ function renderFriendCard(friend: FriendBalance): string {
           </div>
         </div>
 
-        <div class="flex items-center gap-2 shrink-0">
+        <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
           ${balanceHtml}
+          <button type="button" data-share-friend-main="${escapeHtml(friend.id)}" aria-label="Share card for ${escapeHtml(friend.name)}"
+                  class="h-11 w-11 flex items-center justify-center text-zinc-400 hover:text-emerald-400 rounded-xl hover:bg-surface2 transition-colors" title="Share card">
+            <i data-lucide="share-2" class="w-4 h-4"></i>
+          </button>
           <button type="button" data-edit-friend="${escapeHtml(friend.id)}" aria-label="Edit ${escapeHtml(friend.name)}"
                   class="h-11 w-11 flex items-center justify-center text-zinc-400 hover:text-white rounded-xl hover:bg-surface2 transition-colors">
             <i data-lucide="edit-2" class="w-4 h-4"></i>
@@ -327,6 +358,7 @@ function renderFriendCard(friend: FriendBalance): string {
           </div>
         </div>
       </div>
+
       ${groupsBreakdownHtml}
     </div>
   `;
@@ -336,8 +368,13 @@ function attachFriendsEventListeners(container: HTMLElement): void {
   // Toggle accordion on row click
   container.querySelectorAll('[data-friend-toggle]').forEach((el) => {
     el.addEventListener('click', (e) => {
-      // Don't toggle if edit button was clicked
-      if ((e.target as HTMLElement).closest('[data-edit-friend]')) {
+      // Don't toggle if edit or share button was clicked
+      const target = e.target as HTMLElement;
+      if (
+        target.closest('[data-edit-friend]') ||
+        target.closest('[data-share-friend-main]') ||
+        target.closest('[data-share-friend-group]')
+      ) {
         return;
       }
       const friendId = el.getAttribute('data-friend-toggle');
@@ -348,6 +385,41 @@ function attachFriendsEventListeners(container: HTMLElement): void {
         expandedFriendIds.add(friendId);
       }
       renderFriendsUI(container);
+    });
+  });
+
+  // Share from breakdown button
+  container.querySelectorAll<HTMLButtonElement>('[data-share-friend-group]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const groupId = btn.getAttribute('data-share-friend-group');
+      const friendId = btn.getAttribute('data-share-friend-id');
+      if (groupId && friendId) {
+        shareFriendNudge(groupId, friendId);
+      }
+    });
+  });
+
+  // Share from friend main row button (shares directly if 1 group, opens picker if multiple)
+  container.querySelectorAll<HTMLButtonElement>('[data-share-friend-main]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const friendId = btn.getAttribute('data-share-friend-main');
+      if (!friendId) return;
+      const friend = cachedFriends.find((f) => f.id === friendId);
+      if (!friend) return;
+
+      if (friend.groups.length === 0) {
+        showToast(`No groups found with ${friend.name}`, 'error');
+        return;
+      }
+
+      if (friend.groups.length === 1) {
+        shareFriendNudge(friend.groups[0].group_id, friend.id);
+        return;
+      }
+
+      openPickGroupModal(friend);
     });
   });
 
@@ -362,6 +434,7 @@ function attachFriendsEventListeners(container: HTMLElement): void {
       openEditFriendModal(friend);
     });
   });
+
 
   // Add Friend buttons
   const addBtn = document.getElementById('addFriendBtn');
@@ -501,3 +574,76 @@ function openAddFriendModal(): void {
     window.lucide.createIcons();
   }
 }
+
+function openPickGroupModal(friend: FriendBalance): void {
+  const modal = document.getElementById('pickGroupModal');
+  const title = document.getElementById('pickGroupModalTitle');
+  const list = document.getElementById('pickGroupList');
+  const closeBtn = document.getElementById('closePickGroupModalBtn');
+
+  if (!modal || !list) return;
+
+  if (title) {
+    title.textContent = `Share with ${friend.name}`;
+  }
+
+  list.innerHTML = friend.groups
+    .map((g) => {
+      let gBalanceText = '';
+      if (g.net_paise > 0) {
+        gBalanceText = `<span class="text-emerald-400 mono font-semibold">gets back ${formatPaise(g.net_paise)}</span>`;
+      } else if (g.net_paise < 0) {
+        gBalanceText = `<span class="text-rose-400 mono font-semibold">owes ${formatPaise(Math.abs(g.net_paise))}</span>`;
+      } else {
+        gBalanceText = `<span class="text-zinc-500 mono font-medium">settled up</span>`;
+      }
+
+      return `
+        <div class="flex items-center justify-between p-3 rounded-xl bg-pitch hover:bg-zinc-900 border border-borderDark transition-colors">
+          <div class="min-w-0 pr-2">
+            <div class="text-sm font-semibold text-white truncate">${escapeHtml(g.group_name || g.name)}</div>
+            <div class="text-xs mt-0.5">${gBalanceText}</div>
+          </div>
+          <button
+            type="button"
+            data-pick-group-id="${escapeHtml(g.group_id)}"
+            class="h-10 px-3.5 text-xs font-semibold rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black flex items-center gap-1.5 active:scale-95 transition-all shadow-md shadow-emerald-500/20 shrink-0"
+          >
+            <i data-lucide="share-2" class="w-3.5 h-3.5 stroke-[2.5]"></i>
+            <span>Share</span>
+          </button>
+        </div>
+      `;
+    })
+    .join('');
+
+  const closeModal = () => {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    document.body.style.overflow = '';
+  };
+
+  closeBtn?.addEventListener('click', closeModal, { once: true });
+  modal.onclick = (e) => {
+    if (e.target === modal) closeModal();
+  };
+
+  list.querySelectorAll<HTMLButtonElement>('[data-pick-group-id]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const gid = btn.getAttribute('data-pick-group-id');
+      closeModal();
+      if (gid) {
+        shareFriendNudge(gid, friend.id);
+      }
+    });
+  });
+
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  document.body.style.overflow = 'hidden';
+
+  if (window.lucide) {
+    window.lucide.createIcons();
+  }
+}
+

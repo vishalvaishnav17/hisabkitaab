@@ -5,13 +5,14 @@ import { renderGroups } from './views/groups';
 import { renderFriends } from './views/friends';
 import { renderBills } from './views/bills';
 import { renderActivity } from './views/activity';
+import { renderSettings } from './views/settings';
 import { setActiveTab } from './components/tab-bar';
 import { updateBillsTabBadge } from './bills-api';
 
 type RouteHandler = () => void | Promise<void>;
 
 function switchView(activeViewId: string): HTMLElement | null {
-  const views = ['view-dashboard', 'view-groups', 'view-friends', 'view-bills', 'view-activity'];
+  const views = ['view-dashboard', 'view-groups', 'view-friends', 'view-bills', 'view-activity', 'view-settings'];
   for (const id of views) {
     const el = document.getElementById(id);
     if (el) {
@@ -51,7 +52,13 @@ const routes: Record<string, RouteHandler> = {
     setActiveTab('activity');
     if (container) renderActivity(container);
   },
+  '#/settings': () => {
+    const container = switchView('view-settings');
+    setActiveTab(null);
+    if (container) renderSettings(container);
+  },
 };
+
 
 export function registerRoute(path: string, handler: RouteHandler): void {
   routes[path] = handler;

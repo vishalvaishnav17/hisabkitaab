@@ -269,3 +269,27 @@ export function getExportCsvUrl(dateRange: string, includeGroups = true): string
   query.set('include_groups', includeGroups ? '1' : '0');
   return '/api/export?' + query.toString();
 }
+
+export async function fetchSettingsApi(): Promise<{ my_name: string; my_upi_vpa: string } | null> {
+  const res = await fetch('/api/settings');
+  if (redirectIfSignedOut(res)) return null;
+  if (!res.ok) throw new Error('Failed to fetch settings');
+  return res.json();
+}
+
+export async function updateSettingsApi(payload: {
+  my_name?: string;
+  my_upi_vpa?: string;
+}): Promise<{ my_name: string; my_upi_vpa: string } | null> {
+  const res = await fetch('/api/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (redirectIfSignedOut(res)) return null;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to update settings');
+  }
+  return res.json();
+}
