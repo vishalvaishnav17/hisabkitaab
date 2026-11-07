@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  computeBalanceBarWidth,
   computeExactRemainingPaise,
+  computeMaxAbsBalance,
   computeSummaryLine,
   formatNetBalance,
   formatPaise,
   formatRemainingMessage,
+  settlementToTransferForm,
 } from './helpers';
 
 describe('formatPaise', () => {
@@ -169,3 +172,84 @@ describe('formatNetBalance', () => {
     expect(res.colorClass).toContain('zinc');
   });
 });
+
+describe('computeBalanceBarWidth', () => {
+  it('returns 0 when maxAbsPaise is 0 or negative', () => {
+    expect(computeBalanceBarWidth(5000, 0)).toBe(0);
+    expect(computeBalanceBarWidth(5000, -100)).toBe(0);
+  });
+
+  it('returns 0 when netPaise is 0', () => {
+    expect(computeBalanceBarWidth(0, 10000)).toBe(0);
+  });
+
+  it('computes correct percentage for positive net balance', () => {
+    expect(computeBalanceBarWidth(50000, 100000)).toBe(50);
+    expect(computeBalanceBarWidth(25000, 100000)).toBe(25);
+    expect(computeBalanceBarWidth(100000, 100000)).toBe(100);
+  });
+
+  it('computes correct percentage for negative net balance using absolute value', () => {
+    expect(computeBalanceBarWidth(-80000, 100000)).toBe(80);
+    expect(computeBalanceBarWidth(-100000, 100000)).toBe(100);
+  });
+
+  it('caps at 100 if net exceeds max', () => {
+    expect(computeBalanceBarWidth(150000, 100000)).toBe(100);
+    expect(computeBalanceBarWidth(-150000, 100000)).toBe(100);
+  });
+});
+
+describe('computeMaxAbsBalance', () => {
+  it('returns 0 for empty balances', () => {
+    expect(computeMaxAbsBalance({})).toBe(0);
+    expect(computeMaxAbsBalance([])).toBe(0);
+  });
+
+  it('finds the maximum absolute value from record or array', () => {
+    expect(computeMaxAbsBalance({ p1: 5000, p2: -12000, p3: 8000 })).toBe(12000);
+    expect(computeMaxAbsBalance([5000, -15000, 2000])).toBe(15000);
+  });
+});
+
+describe('settlementToTransferForm', () => {
+  it('maps settlement debtor to from_person and creditor to to_person', () => {
+    const settlement = {
+      from: 'person_rahul',
+      to: 'person_priya',
+      amount_paise: 84000,
+    };
+    const formValues = settlementToTransferForm(settlement, '2026-11-07');
+    expect(formValues.from_person).toBe('person_rahul');
+    expect(formValues.to_person).toBe('person_priya');
+    expect(formValues.amount_paise).toBe(84000);
+    expect(formValues.method).toBe('UPI');
+    expect(formValues.date).toBe('2026-11-07');
+    expect(formValues.note).toBe('');
+    expect(formValues.amount_expr).toBeNull();
+  });
+
+  it('handles settlements involving "me"', () => {
+    const settlement = {
+      from: 'me',
+      to: 'person_vikram',
+      amount_paise: 150000,
+    };
+    const formValues = settlementToTransferForm(settlement, '2026-11-07');
+    expect(formValues.from_person).toBe('me');
+    expect(formValues.to_person).toBe('person_vikram');
+    expect(formValues.amount_paise).toBe(150000);
+  });
+
+  it('uses default date if none provided', () => {
+    const settlement = {
+      from: 'p1',
+      to: 'p2',
+      amount_paise: 5000,
+    };
+    const formValues = settlementToTransferForm(settlement);
+    expect(typeof formValues.date).toBe('string');
+    expect(formValues.date.length).toBe(10);
+  });
+});
+

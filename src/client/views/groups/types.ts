@@ -147,3 +147,13 @@ export interface UpdateGroupExpensePayload {
   date?: string;
   notes?: string | null;
 }
+
+export interface CreateGroupTransferPayload {
+  from_person: string;
+  to_person: string;
+  amount_paise: number;
+  amount_expr?: string | null;
+  method?: string | null;
+  date?: string | null;
+  note?: string | null;
+}

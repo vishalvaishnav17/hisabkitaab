@@ -9,9 +9,12 @@ import {
   fetchPeopleApi,
   removeGroupMemberApi,
 } from './api';
-import { formatNetBalance, formatPaise } from './helpers';
+import { formatNetBalance, formatPaise, computeBalanceBarWidth, computeMaxAbsBalance } from './helpers';
 import { openGroupExpenseSheet } from './group-expense-sheet';
 import { openGroupSettingsSheet } from './settings-sheet';
+import { openTransferSheet, openTransferDetailModal } from './transfer-sheet';
+import { fetchBillsApi, updateBillsTabBadge, RecurringBillItem } from '../../bills-api';
+import { openPayBillConfirm } from '../../components/bill-sheet';
 import {
   GroupDetailResponse,
   PersonItem,
@@ -39,6 +42,53 @@ export function renderGroupDetail(container: HTMLElement, groupId: string): void
 
   const loadingEl = container.querySelector('#groupDetailLoading') as HTMLElement;
   const contentEl = container.querySelector('#groupDetailContent') as HTMLElement;
+
+  function updateHeaderSummary() {
+    if (!detail) return;
+    const balanceInfo = formatNetBalance(detail.my_net_paise);
+    const netBalEl = contentEl.querySelector('#headerNetBalance');
+    if (netBalEl) {
+      netBalEl.className = `text-xl sm:text-2xl font-extrabold tracking-tight mt-0.5 ${balanceInfo.colorClass}`;
+      netBalEl.textContent = balanceInfo.text;
+    }
+
+    const nextPayerEl = contentEl.querySelector('#headerNextPayerContainer');
+    if (nextPayerEl) {
+      if (detail.next_payer) {
+        const nextPayerId = detail.next_payer;
+        const isMe = nextPayerId === 'me';
+        const payerMember = detail.members.find((m) => m.person_id === nextPayerId);
+        const payerName = isMe ? 'You' : payerMember ? payerMember.name : 'Unknown';
+        const rawDebtPaise = detail.balances[nextPayerId] ?? 0;
+        const debtPaise = Math.abs(rawDebtPaise);
+
+        nextPayerEl.innerHTML = `
+          <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-emerald-400"></i>
+            <span>Next to pay: <strong class="text-white">${escapeHtml(payerName)}</strong> (${isMe ? 'owe' : 'owes'} ${formatPaise(debtPaise)})</span>
+          </div>
+        `;
+      } else {
+        nextPayerEl.innerHTML = '';
+      }
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
+    }
+  }
+
+  async function refreshGroupData() {
+    try {
+      const data = await fetchGroupDetailApi(groupId);
+      if (!data) return;
+      detail = data;
+      updateHeaderSummary();
+      renderCurrentTab();
+      loadTimeline(true);
+    } catch (err) {
+      console.error('Failed to refresh group data:', err);
+    }
+  }
 
   async function loadData() {
     try {
@@ -114,9 +164,23 @@ export function renderGroupDetail(container: HTMLElement, groupId: string): void
         </div>
 
         <div class="flex items-center gap-2 shrink-0">
-          <!-- TODO(chunk 10): Settle up button slot -->
-          <div id="headerSettleUpSlot" class="hidden sm:block">
-            <!-- Chunk 10 will render Settle Up header action here -->
+          <!-- Settle up button slot -->
+          <div id="headerSettleUpSlot" class="flex items-center">
+            ${
+              !isArchived
+                ? `
+              <button
+                type="button"
+                id="headerRecordPaymentBtn"
+                class="h-10 px-2.5 sm:px-3 text-xs font-semibold bg-surface2 hover:bg-zinc-800 text-zinc-200 hover:text-white border border-borderDark rounded-xl flex items-center gap-1.5 active:scale-95 transition-all"
+                aria-label="Record payment"
+              >
+                <i data-lucide="arrow-left-right" class="w-4 h-4 text-cyan-400"></i>
+                <span class="hidden min-[380px]:inline">Record payment</span>
+              </button>
+            `
+                : ''
+            }
           </div>
 
           ${
@@ -150,11 +214,13 @@ export function renderGroupDetail(container: HTMLElement, groupId: string): void
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <span class="text-xs text-zinc-400 font-medium block">Your Net Balance</span>
-            <div class="text-xl sm:text-2xl font-extrabold tracking-tight mt-0.5 ${balanceInfo.colorClass}">
+            <div id="headerNetBalance" class="text-xl sm:text-2xl font-extrabold tracking-tight mt-0.5 ${balanceInfo.colorClass}">
               ${escapeHtml(balanceInfo.text)}
             </div>
           </div>
-          ${nextPayerHtml ? `<div>${nextPayerHtml}</div>` : ''}
+          <div id="headerNextPayerContainer">
+            ${nextPayerHtml}
+          </div>
         </div>
       </div>
 
@@ -218,6 +284,17 @@ export function renderGroupDetail(container: HTMLElement, groupId: string): void
       window.lucide.createIcons();
     }
 
+    // Attach Record Payment header button listener
+    const recordPaymentBtn = contentEl.querySelector('#headerRecordPaymentBtn');
+    recordPaymentBtn?.addEventListener('click', () => {
+      openTransferSheet({
+        detail: detail!,
+        onSaved: () => {
+          refreshGroupData();
+        },
+      });
+    });
+
     // Attach Settings button listener
     const settingsBtn = contentEl.querySelector('#groupSettingsBtn');
     settingsBtn?.addEventListener('click', () => {
@@ -225,7 +302,7 @@ export function renderGroupDetail(container: HTMLElement, groupId: string): void
         if (action === 'deleted') {
           // Handled inside settings sheet
         } else {
-          loadData();
+          refreshGroupData();
         }
       });
     });
@@ -236,7 +313,7 @@ export function renderGroupDetail(container: HTMLElement, groupId: string): void
       openGroupExpenseSheet({
         detail: detail!,
         onSaved: () => {
-          loadData();
+          refreshGroupData();
         },
       });
     });
@@ -416,7 +493,7 @@ export function renderGroupDetail(container: HTMLElement, groupId: string): void
         itemsHtml += `
           <div
             data-transfer-id="${escapeHtml(tr.id)}"
-            class="timeline-transfer-card bg-surface2/40 border border-cyan-500/20 rounded-2xl p-3.5 sm:p-4 space-y-2 relative"
+            class="timeline-transfer-card bg-surface2/40 hover:bg-surface2/70 border border-cyan-500/20 hover:border-cyan-500/40 rounded-2xl p-3.5 sm:p-4 space-y-2 relative cursor-pointer active:scale-[0.99] transition-all"
           >
             <div class="flex items-center justify-between gap-2">
               <div class="flex items-center gap-2 min-w-0">
@@ -491,7 +568,25 @@ export function renderGroupDetail(container: HTMLElement, groupId: string): void
           openGroupExpenseSheet({
             detail: detail!,
             expense: expItem,
-            onSaved: () => loadData(),
+            onSaved: () => refreshGroupData(),
+          });
+        }
+      });
+    });
+
+    // Attach click listeners to transfers
+    container.querySelectorAll<HTMLElement>('.timeline-transfer-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        const tid = card.dataset.transferId;
+        if (!tid || !detail) return;
+        const trItem = timelineItems.find((i) => i.id === tid && i.type === 'transfer') as
+          | TimelineTransferItem
+          | undefined;
+        if (trItem) {
+          openTransferDetailModal({
+            detail,
+            transfer: trItem,
+            onDeleted: () => refreshGroupData(),
           });
         }
       });
@@ -708,27 +803,299 @@ export function renderGroupDetail(container: HTMLElement, groupId: string): void
     });
   }
 
-  // --- Balances Tab (TODO(chunk 10) slot) ---
+  // --- Balances Tab ---
   function renderBalancesTab(container: HTMLElement) {
-    // TODO(chunk 10): Full Balances, Settlements, and Settle up sheet implementation
-    container.innerHTML = `
-      <div class="py-12 text-center bg-surface border border-borderDark rounded-2xl p-6">
-        <div class="w-12 h-12 mx-auto rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mb-3">
-          <i data-lucide="scale" class="w-6 h-6"></i>
+    if (!detail) return;
+    const isArchived = Boolean(detail.group.archived_at);
+    const activeMembers = detail.members.filter((m) => !m.left_at);
+    const settlements = detail.settlements || [];
+    const maxAbsPaise = computeMaxAbsBalance(detail.balances);
+    const allSettled = Object.values(detail.balances).every((b) => (b ?? 0) === 0);
+
+    // 1. Settle Up (Settlements) Section
+    let settlementsHtml = '';
+    if (allSettled || settlements.length === 0) {
+      settlementsHtml = `
+        <div class="p-6 text-center bg-surface border border-borderDark rounded-2xl">
+          <div class="w-10 h-10 mx-auto rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mb-2">
+            <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+          </div>
+          <h4 class="text-sm font-semibold text-white">All settled up</h4>
+          <p class="text-xs text-zinc-500 mt-0.5">No outstanding payments in this group.</p>
         </div>
-        <h3 class="text-base font-bold text-white tracking-tight">Balances & Settle Up</h3>
-        <p class="text-xs text-zinc-400 mt-1 max-w-sm mx-auto leading-relaxed">
-          Simplified debt settlements and direct transfers are part of the settlement workflow.
-        </p>
-        <span class="inline-block mt-4 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-          Coming in Chunk 10
-        </span>
+      `;
+    } else {
+      const rows = settlements.map((s) => {
+        const fromMember = detail!.members.find((m) => m.person_id === s.from);
+        const toMember = detail!.members.find((m) => m.person_id === s.to);
+        const fromName = s.from === 'me' ? 'You' : fromMember ? fromMember.name : s.from;
+        const toName = s.to === 'me' ? 'You' : toMember ? toMember.name : s.to;
+
+        return `
+          <div class="p-3.5 bg-surface border border-borderDark rounded-2xl flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <div class="text-xs sm:text-sm text-zinc-200">
+                <strong class="text-white">${escapeHtml(fromName)}</strong> pays <strong class="text-white">${escapeHtml(toName)}</strong>
+              </div>
+              <div class="text-sm font-bold font-mono text-cyan-400 mt-0.5">
+                ${formatPaise(s.amount_paise)}
+              </div>
+            </div>
+
+            ${
+              !isArchived
+                ? `
+              <button
+                type="button"
+                data-settlement-from="${escapeHtml(s.from)}"
+                data-settlement-to="${escapeHtml(s.to)}"
+                data-settlement-amount="${s.amount_paise}"
+                class="record-settlement-btn h-9 min-h-[36px] px-3.5 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl active:scale-95 transition-all shrink-0 shadow-sm shadow-emerald-500/10 cursor-pointer"
+              >
+                Record
+              </button>
+            `
+                : ''
+            }
+          </div>
+        `;
+      });
+      settlementsHtml = `<div class="space-y-2">${rows.join('')}</div>`;
+    }
+
+    // 2. Member Balances Section
+    const memberRows = activeMembers.map((m) => {
+      const net = detail!.balances[m.person_id] ?? 0;
+      let label = 'settled up';
+      let colorClass = 'text-zinc-500';
+      let barColor = 'bg-zinc-700';
+
+      if (net > 0) {
+        label = `gets back ${formatPaise(net)}`;
+        colorClass = 'text-emerald-400';
+        barColor = 'bg-emerald-500';
+      } else if (net < 0) {
+        label = `owes ${formatPaise(Math.abs(net))}`;
+        colorClass = 'text-rose-400';
+        barColor = 'bg-rose-500';
+      }
+
+      const barWidth = computeBalanceBarWidth(net, maxAbsPaise);
+
+      return `
+        <div class="p-3.5 bg-surface border border-borderDark rounded-2xl space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 min-w-0">
+              <div class="w-8 h-8 rounded-xl bg-surface2 border border-borderDark flex items-center justify-center text-xs font-bold text-zinc-200 uppercase shrink-0">
+                ${escapeHtml(m.name.charAt(0) || '?')}
+              </div>
+              <div class="min-w-0">
+                <span class="text-sm font-semibold text-white truncate block">
+                  ${escapeHtml(m.name)}
+                  ${m.is_me ? '<span class="ml-1 text-[10px] font-bold bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded">You</span>' : ''}
+                </span>
+              </div>
+            </div>
+            <div class="text-right shrink-0">
+              <span class="text-xs font-semibold ${colorClass}">
+                ${escapeHtml(label)}
+              </span>
+            </div>
+          </div>
+
+          <!-- Horizontal relative bar -->
+          <div class="w-full h-2 bg-surface2 rounded-full overflow-hidden">
+            <div
+              class="h-full rounded-full ${barColor} transition-all duration-300"
+              style="width: ${barWidth}%"
+            ></div>
+          </div>
+        </div>
+      `;
+    });
+
+    const isSimplified = Boolean(detail.group.simplify_debts);
+    const modeText = isSimplified ? 'Simplified: fewest payments' : 'Direct debts';
+
+    container.innerHTML = `
+      <div class="space-y-6">
+        <!-- Settle Up Section -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <h4 class="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+              <i data-lucide="sparkles" class="w-3.5 h-3.5 text-cyan-400"></i>
+              <span>Settle Up</span>
+            </h4>
+            <div class="flex items-center gap-1 text-xs text-zinc-400">
+              <span>${escapeHtml(modeText)}</span>
+              <button
+                type="button"
+                id="settleModeSettingLink"
+                class="text-emerald-400 hover:text-emerald-300 font-medium underline inline-flex items-center gap-0.5 cursor-pointer ml-1"
+              >
+                <span>Settings</span>
+                <i data-lucide="chevron-right" class="w-3 h-3"></i>
+              </button>
+            </div>
+          </div>
+
+          ${settlementsHtml}
+        </div>
+
+        <!-- Member Balances Section -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <h4 class="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+              <i data-lucide="scale" class="w-3.5 h-3.5 text-emerald-400"></i>
+              <span>Member Balances</span>
+            </h4>
+          </div>
+
+          <div class="space-y-2">
+            ${memberRows.join('')}
+          </div>
+        </div>
+
+        <!-- Shared Recurring Bills Section -->
+        <div class="space-y-3 pt-2">
+          <div class="flex items-center justify-between">
+            <h4 class="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+              <i data-lucide="calendar" class="w-3.5 h-3.5 text-zinc-400"></i>
+              <span>Shared Recurring Bills</span>
+            </h4>
+          </div>
+
+          <div id="sharedBillsContainer" class="space-y-2">
+            <div class="p-4 bg-surface border border-borderDark rounded-2xl text-center text-xs text-zinc-500">
+              Loading recurring bills...
+            </div>
+          </div>
+        </div>
       </div>
     `;
 
     if (window.lucide) {
       window.lucide.createIcons();
     }
+
+    // Link to group settings
+    container.querySelector('#settleModeSettingLink')?.addEventListener('click', () => {
+      openGroupSettingsSheet(detail!, () => {
+        refreshGroupData();
+      });
+    });
+
+    // Record buttons on settlements
+    if (!isArchived) {
+      container.querySelectorAll<HTMLButtonElement>('.record-settlement-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const from_person = btn.dataset.settlementFrom;
+          const to_person = btn.dataset.settlementTo;
+          const amount_paise = Number(btn.dataset.settlementAmount) || 0;
+          openTransferSheet({
+            detail: detail!,
+            prefill: {
+              from_person,
+              to_person,
+              amount_paise,
+            },
+            onSaved: () => refreshGroupData(),
+          });
+        });
+      });
+    }
+
+    // Load shared recurring bills
+    fetchBillsApi().then((billsRes) => {
+      const billsContainer = container.querySelector('#sharedBillsContainer');
+      if (!billsContainer) return;
+
+      const allBills = [...(billsRes?.due || []), ...(billsRes?.upcoming || [])];
+      const seenIds = new Set<string>();
+      const groupBills: RecurringBillItem[] = [];
+      for (const b of allBills) {
+        if (b.group_id === groupId && !seenIds.has(b.id)) {
+          seenIds.add(b.id);
+          groupBills.push(b);
+        }
+      }
+
+      if (groupBills.length === 0) {
+        billsContainer.innerHTML = `
+          <div class="p-4 bg-surface border border-borderDark rounded-2xl text-center text-xs text-zinc-500">
+            No recurring bills linked to this group.
+          </div>
+        `;
+        return;
+      }
+
+      billsContainer.innerHTML = groupBills
+        .map((b) => {
+          let badgeHtml = '';
+          if (b.is_overdue) {
+            badgeHtml =
+              '<span class="px-2 py-0.5 text-[10px] font-semibold bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-full">Overdue</span>';
+          } else if (b.periods_due > 0) {
+            badgeHtml =
+              '<span class="px-2 py-0.5 text-[10px] font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full">Due</span>';
+          } else {
+            badgeHtml =
+              '<span class="px-2 py-0.5 text-[10px] font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700 rounded-full">Upcoming</span>';
+          }
+
+          const amountText = b.amount_paise !== null ? formatPaise(b.amount_paise) : 'Amount varies';
+
+          return `
+            <div class="p-3.5 bg-surface border border-borderDark rounded-2xl flex items-center justify-between gap-3">
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-sm font-semibold text-white truncate">${escapeHtml(b.title)}</span>
+                  ${badgeHtml}
+                </div>
+                <div class="text-xs text-zinc-400 mt-0.5 flex items-center gap-2">
+                  <span class="font-mono font-medium text-emerald-400">${amountText}</span>
+                  <span class="text-zinc-600">&bull;</span>
+                  <span>Due: <span class="font-mono text-zinc-300">${escapeHtml(b.next_due)}</span></span>
+                </div>
+              </div>
+
+              ${
+                !isArchived
+                  ? `
+                <button
+                  type="button"
+                  data-bill-id="${escapeHtml(b.id)}"
+                  class="mark-paid-bill-btn h-9 min-h-[36px] px-3.5 text-xs font-semibold bg-surface2 hover:bg-zinc-800 text-emerald-400 hover:text-emerald-300 border border-borderDark hover:border-emerald-500/30 rounded-xl active:scale-95 transition-all shrink-0 cursor-pointer"
+                >
+                  Mark paid
+                </button>
+              `
+                  : ''
+              }
+            </div>
+          `;
+        })
+        .join('');
+
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
+
+      if (!isArchived) {
+        billsContainer.querySelectorAll<HTMLButtonElement>('.mark-paid-bill-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const bid = btn.dataset.billId;
+            const bill = groupBills.find((x) => x.id === bid);
+            if (bill) {
+              openPayBillConfirm(bill, () => {
+                refreshGroupData();
+                updateBillsTabBadge();
+              });
+            }
+          });
+        });
+      }
+    });
   }
 
   // --- Activity Tab ---

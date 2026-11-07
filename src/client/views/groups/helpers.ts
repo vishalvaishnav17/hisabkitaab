@@ -138,3 +138,58 @@ export function formatNetBalance(netPaise: number): NetBalanceResult {
     badgeClass: 'bg-zinc-800 text-zinc-400 border-zinc-700/50',
   };
 }
+
+/**
+ * Computes percentage width (0-100) for a member's balance bar relative to the maximum absolute balance.
+ */
+export function computeBalanceBarWidth(netPaise: number, maxAbsPaise: number): number {
+  if (!maxAbsPaise || maxAbsPaise <= 0 || !netPaise) {
+    return 0;
+  }
+  const pct = Math.round((Math.abs(netPaise) / maxAbsPaise) * 100);
+  return Math.min(100, Math.max(0, pct));
+}
+
+/**
+ * Finds the maximum absolute balance among all members.
+ */
+export function computeMaxAbsBalance(balances: Record<string, number> | number[]): number {
+  const values = Array.isArray(balances) ? balances : Object.values(balances);
+  if (values.length === 0) return 0;
+  return Math.max(0, ...values.map((v) => Math.abs(v || 0)));
+}
+
+export interface TransferFormValues {
+  from_person: string;
+  to_person: string;
+  amount_paise: number;
+  amount_expr: string | null;
+  method: string;
+  date: string;
+  note: string;
+}
+
+/**
+ * Maps a suggested settlement payment into default transfer form values.
+ * - From defaults to the debtor (settlement.from)
+ * - To defaults to the creditor (settlement.to)
+ * - Amount defaults to settlement.amount_paise
+ * - Method defaults to 'UPI'
+ * - Date defaults to today's ISO date
+ * - Note defaults to empty string
+ */
+export function settlementToTransferForm(
+  settlement: { from: string; to: string; amount_paise: number },
+  today?: string
+): TransferFormValues {
+  return {
+    from_person: settlement.from,
+    to_person: settlement.to,
+    amount_paise: settlement.amount_paise,
+    amount_expr: null,
+    method: 'UPI',
+    date: today || new Date().toISOString().split('T')[0],
+    note: '',
+  };
+}
+

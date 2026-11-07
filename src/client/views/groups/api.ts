@@ -2,6 +2,7 @@ import { redirectIfSignedOut } from '../../api';
 import {
   CreateGroupExpensePayload,
   CreateGroupPayload,
+  CreateGroupTransferPayload,
   GroupDetailResponse,
   GroupListItem,
   PersonItem,
@@ -257,3 +258,21 @@ export async function deleteGroupTransferApi(
   }
   return res.json();
 }
+
+export async function createGroupTransferApi(
+  groupId: string,
+  payload: CreateGroupTransferPayload
+): Promise<{ success: boolean; id: string; activity_id: string; transfer: any } | null> {
+  const res = await fetch(`/api/groups/${encodeURIComponent(groupId)}/transfers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (redirectIfSignedOut(res)) return null;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to record payment');
+  }
+  return res.json();
+}
+
