@@ -100,3 +100,57 @@ test('migration 0001_foundation converts REAL amounts to INTEGER paise and seeds
     await proxy.dispose();
   }
 });
+
+test('migration 0002_groups creates groups, members, expenses, shares, and transfers tables', async () => {
+  const proxy = await getPlatformProxy<{ DB: D1Database }>({
+    configPath: 'wrangler.jsonc',
+    remoteBindings: false,
+    persist: false,
+  });
+
+  try {
+    const db = proxy.env.DB;
+    const { applyAllMigrations } = await import('./test-utils');
+    await applyAllMigrations(db);
+
+    // Verify groups table with check constraint on kind
+    await db
+      .prepare("INSERT INTO groups (id, name, kind, simplify_debts, created_at) VALUES ('g1', 'Trip 1', 'trip', 1, datetime('now'))")
+      .run();
+
+    let invalidKindThrew = false;
+    try {
+      await db
+        .prepare("INSERT INTO groups (id, name, kind, created_at) VALUES ('g2', 'Bad Kind', 'invalid', datetime('now'))")
+        .run();
+    } catch {
+      invalidKindThrew = true;
+    }
+    expect(invalidKindThrew).toBe(true);
+
+    // Verify transfers check constraint: from_person <> to_person
+    let samePersonThrew = false;
+    try {
+      await db
+        .prepare("INSERT INTO transfers (id, group_id, from_person, to_person, amount_paise, date, created_at) VALUES ('t1', 'g1', 'me', 'me', 1000, '2026-11-01', datetime('now'))")
+        .run();
+    } catch {
+      samePersonThrew = true;
+    }
+    expect(samePersonThrew).toBe(true);
+
+    // Verify amount_paise > 0 check constraint
+    let zeroAmountThrew = false;
+    try {
+      await db
+        .prepare("INSERT INTO group_expenses (id, group_id, description, amount_paise, paid_by, split_type, date, created_at, updated_at) VALUES ('e1', 'g1', 'Zero Exp', 0, 'me', 'equal', '2026-11-01', datetime('now'), datetime('now'))")
+        .run();
+    } catch {
+      zeroAmountThrew = true;
+    }
+    expect(zeroAmountThrew).toBe(true);
+  } finally {
+    await proxy.dispose();
+  }
+});
+

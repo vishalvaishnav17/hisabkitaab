@@ -157,11 +157,38 @@ activityRouter.post('/api/activity/:id/restore', async (c) => {
       .prepare('SELECT * FROM expenses WHERE id = ?')
       .bind(entry.entity_id)
       .first();
+  } else if (entry.entity_type === 'group_expense') {
+    current = await db
+      .prepare('SELECT * FROM group_expenses WHERE id = ?')
+      .bind(entry.entity_id)
+      .first();
+    if (current) {
+      const { results: shares } = await db
+        .prepare('SELECT person_id, amount_paise FROM expense_shares WHERE expense_id = ?')
+        .bind(entry.entity_id)
+        .all();
+      current.shares = shares;
+    }
+  } else if (entry.entity_type === 'transfer') {
+    current = await db
+      .prepare('SELECT * FROM transfers WHERE id = ?')
+      .bind(entry.entity_id)
+      .first();
+  } else if (entry.entity_type === 'group') {
+    current = await db
+      .prepare('SELECT * FROM groups WHERE id = ?')
+      .bind(entry.entity_id)
+      .first();
+  } else if (entry.entity_type === 'person') {
+    current = await db
+      .prepare('SELECT * FROM people WHERE id = ?')
+      .bind(entry.entity_id)
+      .first();
   }
 
   const stmts = await restorer(db, snapshot);
 
-  const label = snapshot.description || entry.entity_type;
+  const label = snapshot.description || snapshot.name || entry.entity_type;
   const summary = `Restored ${label}`;
 
   const restoreActivityId = await logged(db, stmts, {

@@ -4,6 +4,8 @@ import { Bindings } from './env';
 import { manifest, serviceWorker } from './pwa';
 import expensesRouter from './routes/expenses';
 import activityRouter from './routes/activity';
+import peopleRouter from './routes/people';
+import groupsRouter from './routes/groups';
 
 const app = new Hono<{ Bindings: Bindings }>();
 
@@ -69,6 +71,8 @@ app.use('*', cors());
 
 app.route('/', expensesRouter);
 app.route('/', activityRouter);
+app.route('/', peopleRouter);
+app.route('/', groupsRouter);
 
 // Catch-all route to serve static assets from ASSETS behind Clerk gate
 app.get('*', async (c) => {
