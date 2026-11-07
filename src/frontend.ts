@@ -3,9 +3,16 @@ export function renderHtml(): string {
 <html lang="en" class="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="HisabKitaab">
   <title>HisabKitaab - Expense Tracker</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>₹</text></svg>">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
+  <link rel="icon" href="/icons/icon-192.png" type="image/png">
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -32,10 +39,27 @@ export function renderHtml(): string {
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
     
+    html {
+      color-scheme: dark;
+      background-color: #000000;
+    }
     body {
       font-family: 'Plus Jakarta Sans', sans-serif;
       background-color: #000000;
       color: #fafafa;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+    /* 16px stops iOS from zooming the page when a field is focused. */
+    input, select, textarea {
+      font-size: 16px;
+    }
+    @media (min-width: 768px) {
+      input, select, textarea {
+        font-size: 14px;
+      }
     }
     .mono {
       font-family: 'JetBrains Mono', monospace;
@@ -60,104 +84,114 @@ export function renderHtml(): string {
 <body class="min-h-screen bg-black text-zinc-100 antialiased selection:bg-emerald-500/30 selection:text-emerald-400">
   <div class="min-h-screen flex flex-col">
     <!-- Navbar -->
-    <header class="border-b border-borderDark bg-black/80 backdrop-blur sticky top-0 z-40">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 p-[1px] flex items-center justify-center shadow-lg shadow-emerald-500/10">
-            <div class="w-full h-full bg-black rounded-[11px] flex items-center justify-center font-bold text-emerald-400 text-xl mono">
+    <header class="border-b border-borderDark bg-black/80 backdrop-blur sticky top-0 z-40 pt-[env(safe-area-inset-top)]">
+      <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 p-[1px] flex items-center justify-center shadow-lg shadow-emerald-500/10">
+            <div class="w-full h-full bg-black rounded-[11px] flex items-center justify-center font-bold text-emerald-400 text-lg sm:text-xl mono">
               ₹
             </div>
           </div>
-          <div>
+          <div class="min-w-0">
             <div class="flex items-center gap-2">
-              <span class="font-bold text-lg tracking-tight text-white">HisabKitaab</span>
-              <span class="px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full uppercase tracking-wider">INR</span>
+              <span class="font-bold text-base sm:text-lg tracking-tight text-white truncate">HisabKitaab</span>
+              <span class="hidden min-[380px]:inline px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full uppercase tracking-wider">INR</span>
             </div>
             <p class="text-xs text-zinc-500 hidden sm:block">Clean & fast personal expense management</p>
           </div>
         </div>
 
-        <div class="flex items-center gap-2 sm:gap-3">
-          <button id="exportCsvBtn" class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-surface2 hover:bg-zinc-800 text-zinc-300 border border-borderDark rounded-lg transition-all">
+        <div class="flex items-center gap-2 shrink-0">
+          <button id="exportCsvBtn" aria-label="Export CSV" class="flex items-center justify-center gap-1.5 h-11 w-11 sm:w-auto sm:px-3 text-xs font-medium bg-surface2 hover:bg-zinc-800 text-zinc-300 border border-borderDark rounded-lg transition-all">
             <i data-lucide="download" class="w-4 h-4"></i>
             <span class="hidden sm:inline">Export CSV</span>
           </button>
           
-          <button id="openAddModalBtn" class="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black rounded-lg transition-all shadow-md shadow-emerald-500/20 active:scale-95">
+          <button id="openAddModalBtn" aria-label="Add expense" class="flex items-center justify-center gap-1.5 h-11 px-3 sm:px-3.5 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black rounded-lg transition-all shadow-md shadow-emerald-500/20 active:scale-95">
             <i data-lucide="plus" class="w-4 h-4 stroke-[2.5]"></i>
-            <span>Add Expense</span>
+            <span class="hidden min-[400px]:inline sm:hidden">Add</span>
+            <span class="hidden sm:inline">Add Expense</span>
           </button>
         </div>
       </div>
     </header>
 
+    <div id="installHint" class="hidden border-b border-emerald-500/20 bg-emerald-500/10">
+      <div class="max-w-7xl mx-auto px-3 sm:px-6 py-3 flex items-start gap-3">
+        <p class="text-sm text-emerald-100 leading-relaxed flex-1">
+          Tap <span class="font-semibold">Share</span>, then <span class="font-semibold">Add to Home Screen</span>, to open HisabKitaab like an app.
+        </p>
+        <button id="dismissInstallHint" type="button" class="shrink-0 h-11 px-2 text-sm font-medium text-emerald-300">Not now</button>
+      </div>
+    </div>
+
     <!-- Main Content -->
-    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6">
       
       <!-- Metrics Overview -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <!-- Card 1: Total Spent -->
-        <div class="bg-surface border border-borderDark rounded-2xl p-5 relative overflow-hidden group hover:border-zinc-700/60 transition-all">
+        <div class="bg-surface border border-borderDark rounded-2xl p-3.5 sm:p-5 relative overflow-hidden group hover:border-zinc-700/60 transition-all min-w-0">
           <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-rose-500/5 rounded-full blur-2xl group-hover:bg-rose-500/10 transition-all"></div>
-          <div class="flex items-center justify-between text-zinc-400 text-xs font-medium">
-            <span>Total Spent (Filtered)</span>
+          <div class="flex items-center justify-between gap-2 text-zinc-400 text-xs font-medium">
+            <span>Total Spent <span class="hidden sm:inline">(Filtered)</span></span>
             <span class="p-1.5 bg-rose-500/10 text-rose-400 rounded-lg"><i data-lucide="arrow-up-right" class="w-4 h-4"></i></span>
           </div>
           <div class="mt-3">
-            <h3 id="statTotalSpend" class="text-2xl sm:text-3xl font-extrabold text-white mono">₹0</h3>
+            <h3 id="statTotalSpend" class="text-xl sm:text-3xl font-extrabold text-white mono truncate">₹0</h3>
             <p id="statTxnCount" class="text-xs text-zinc-500 mt-1">0 transactions recorded</p>
           </div>
         </div>
 
         <!-- Card 2: Current Month -->
-        <div class="bg-surface border border-borderDark rounded-2xl p-5 relative overflow-hidden group hover:border-zinc-700/60 transition-all">
+        <div class="bg-surface border border-borderDark rounded-2xl p-3.5 sm:p-5 relative overflow-hidden group hover:border-zinc-700/60 transition-all min-w-0">
           <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-all"></div>
           <div class="flex items-center justify-between text-zinc-400 text-xs font-medium">
             <span>This Month</span>
             <span class="p-1.5 bg-emerald-500/10 text-emerald-400 rounded-lg"><i data-lucide="calendar" class="w-4 h-4"></i></span>
           </div>
           <div class="mt-3">
-            <h3 id="statMonthSpend" class="text-2xl sm:text-3xl font-extrabold text-white mono">₹0</h3>
+            <h3 id="statMonthSpend" class="text-xl sm:text-3xl font-extrabold text-white mono truncate">₹0</h3>
             <p id="statMonthLabel" class="text-xs text-zinc-500 mt-1">Current billing cycle</p>
           </div>
         </div>
 
         <!-- Card 3: Daily Average -->
-        <div class="bg-surface border border-borderDark rounded-2xl p-5 relative overflow-hidden group hover:border-zinc-700/60 transition-all">
+        <div class="bg-surface border border-borderDark rounded-2xl p-3.5 sm:p-5 relative overflow-hidden group hover:border-zinc-700/60 transition-all min-w-0">
           <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-cyan-500/5 rounded-full blur-2xl group-hover:bg-cyan-500/10 transition-all"></div>
           <div class="flex items-center justify-between text-zinc-400 text-xs font-medium">
             <span>Daily Average</span>
             <span class="p-1.5 bg-cyan-500/10 text-cyan-400 rounded-lg"><i data-lucide="activity" class="w-4 h-4"></i></span>
           </div>
           <div class="mt-3">
-            <h3 id="statDailyAvg" class="text-2xl sm:text-3xl font-extrabold text-white mono">₹0</h3>
+            <h3 id="statDailyAvg" class="text-xl sm:text-3xl font-extrabold text-white mono truncate">₹0</h3>
             <p class="text-xs text-zinc-500 mt-1">Average per active day</p>
           </div>
         </div>
 
         <!-- Card 4: Top Category -->
-        <div class="bg-surface border border-borderDark rounded-2xl p-5 relative overflow-hidden group hover:border-zinc-700/60 transition-all">
+        <div class="bg-surface border border-borderDark rounded-2xl p-3.5 sm:p-5 relative overflow-hidden group hover:border-zinc-700/60 transition-all min-w-0">
           <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl group-hover:bg-amber-500/10 transition-all"></div>
           <div class="flex items-center justify-between text-zinc-400 text-xs font-medium">
             <span>Top Category</span>
             <span class="p-1.5 bg-amber-500/10 text-amber-400 rounded-lg"><i data-lucide="pie-chart" class="w-4 h-4"></i></span>
           </div>
           <div class="mt-3">
-            <h3 id="statTopCategory" class="text-xl sm:text-2xl font-bold text-white truncate">-</h3>
+            <h3 id="statTopCategory" class="text-base sm:text-2xl font-bold text-white truncate">-</h3>
             <p id="statTopCategoryAmount" class="text-xs text-zinc-500 mt-1">₹0 total</p>
           </div>
         </div>
       </div>
 
       <!-- Charts Section -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         <!-- Category Breakdown Chart -->
-        <div class="bg-surface border border-borderDark rounded-2xl p-5 lg:col-span-1 flex flex-col">
+        <div class="bg-surface border border-borderDark rounded-2xl p-4 sm:p-5 lg:col-span-1 flex flex-col min-w-0">
           <div class="flex items-center justify-between mb-4">
             <h4 class="text-sm font-semibold text-zinc-200">Category Breakdown</h4>
             <span class="text-xs text-zinc-500">Distribution</span>
           </div>
-          <div class="flex-1 relative flex items-center justify-center min-h-[220px]">
+          <div class="flex-1 relative flex items-center justify-center min-h-[200px] sm:min-h-[220px]">
             <canvas id="categoryChart"></canvas>
             <div id="noChartData" class="absolute text-center text-xs text-zinc-600 hidden">
               No expenses in this period
@@ -166,30 +200,30 @@ export function renderHtml(): string {
         </div>
 
         <!-- Daily / Trends Chart -->
-        <div class="bg-surface border border-borderDark rounded-2xl p-5 lg:col-span-2 flex flex-col">
-          <div class="flex items-center justify-between mb-4">
+        <div class="bg-surface border border-borderDark rounded-2xl p-4 sm:p-5 lg:col-span-2 flex flex-col min-w-0">
+          <div class="flex items-center justify-between gap-2 mb-4">
             <h4 class="text-sm font-semibold text-zinc-200">Daily Spending Trend</h4>
-            <span class="text-xs text-zinc-500">Last 14 Active Days</span>
+            <span class="text-xs text-zinc-500 shrink-0">Last 14 days</span>
           </div>
-          <div class="flex-1 relative min-h-[220px]">
+          <div class="flex-1 relative min-h-[200px] sm:min-h-[220px]">
             <canvas id="trendChart"></canvas>
           </div>
         </div>
       </div>
 
       <!-- Filters & Transaction Management -->
-      <div class="bg-surface border border-borderDark rounded-2xl p-5 space-y-4">
+      <div class="bg-surface border border-borderDark rounded-2xl p-3 sm:p-5 space-y-4">
         <!-- Search & Filter Controls -->
         <div class="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
           <div class="relative flex-1">
             <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500"></i>
-            <input id="searchInput" type="text" placeholder="Search by note, description or category..." 
-              class="w-full bg-surface2 border border-borderDark rounded-xl pl-10 pr-4 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50 transition-colors">
+            <input id="searchInput" type="search" enterkeyhint="search" placeholder="Search expenses" 
+              class="w-full bg-surface2 border border-borderDark rounded-xl pl-10 pr-4 h-11 text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50 transition-colors">
           </div>
 
-          <div class="flex flex-wrap items-center gap-2">
+          <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
             <!-- Category Filter -->
-            <select id="categoryFilter" class="bg-surface2 border border-borderDark text-zinc-300 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500/50">
+            <select id="categoryFilter" class="w-full sm:w-auto bg-surface2 border border-borderDark text-zinc-300 rounded-xl px-3 h-11 focus:outline-none focus:border-emerald-500/50">
               <option value="">All Categories</option>
               <option value="Food & Dining">🍔 Food & Dining</option>
               <option value="Groceries">🛒 Groceries</option>
@@ -204,7 +238,7 @@ export function renderHtml(): string {
             </select>
 
             <!-- Payment Method Filter -->
-            <select id="paymentFilter" class="bg-surface2 border border-borderDark text-zinc-300 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500/50">
+            <select id="paymentFilter" class="w-full sm:w-auto bg-surface2 border border-borderDark text-zinc-300 rounded-xl px-3 h-11 focus:outline-none focus:border-emerald-500/50">
               <option value="">All Payment Modes</option>
               <option value="UPI">UPI</option>
               <option value="Credit Card">Credit Card</option>
@@ -214,7 +248,7 @@ export function renderHtml(): string {
             </select>
 
             <!-- Date Range Filter -->
-            <select id="dateFilter" class="bg-surface2 border border-borderDark text-zinc-300 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500/50">
+            <select id="dateFilter" class="col-span-2 sm:col-span-1 w-full sm:w-auto bg-surface2 border border-borderDark text-zinc-300 rounded-xl px-3 h-11 focus:outline-none focus:border-emerald-500/50">
               <option value="this_month">This Month</option>
               <option value="last_month">Last Month</option>
               <option value="last_30">Last 30 Days</option>
@@ -224,7 +258,8 @@ export function renderHtml(): string {
         </div>
 
         <!-- Transactions List -->
-        <div class="overflow-x-auto">
+        <div id="transactionsCards" class="lg:hidden space-y-2"></div>
+        <div class="hidden lg:block overflow-x-auto">
           <table class="w-full text-left text-sm text-zinc-300">
             <thead class="text-xs text-zinc-500 uppercase border-b border-borderDark/60 bg-pitch">
               <tr>
@@ -240,6 +275,7 @@ export function renderHtml(): string {
               <!-- Dynamically populated rows -->
             </tbody>
           </table>
+        </div>
 
           <!-- Empty State -->
           <div id="emptyState" class="hidden py-12 text-center">
@@ -255,22 +291,21 @@ export function renderHtml(): string {
             <div class="inline-block animate-spin rounded-full h-8 w-8 border-2 border-emerald-500 border-t-transparent"></div>
             <p class="text-xs text-zinc-500 mt-2">Loading transactions...</p>
           </div>
-        </div>
       </div>
     </main>
 
     <!-- Footer -->
-    <footer class="border-t border-borderDark/60 bg-black py-4 text-center text-xs text-zinc-600">
+    <footer class="border-t border-borderDark/60 bg-black py-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-center text-xs text-zinc-600">
       HisabKitaab &bull; Hosted on Cloudflare Workers &bull; Secured with Cloudflare D1
     </footer>
   </div>
 
   <!-- Add / Edit Expense Modal -->
-  <div id="expenseModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
-    <div class="bg-surface border border-zinc-800 w-full max-w-md rounded-2xl p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
+  <div id="expenseModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-end sm:items-center justify-center sm:p-4">
+    <div class="bg-surface border border-zinc-800 w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-5 sm:p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl relative max-h-[100dvh] overflow-y-auto">
       <div class="flex items-center justify-between pb-4 border-b border-borderDark">
         <h3 id="modalTitle" class="text-base font-semibold text-white">Add New Expense</h3>
-        <button id="closeModalBtn" class="text-zinc-500 hover:text-zinc-300 p-1 rounded-lg">
+        <button id="closeModalBtn" aria-label="Close" class="text-zinc-500 hover:text-zinc-300 h-11 w-11 flex items-center justify-center rounded-lg">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
@@ -283,15 +318,15 @@ export function renderHtml(): string {
           <label class="block text-xs font-medium text-zinc-400 mb-1">Amount (₹) *</label>
           <div class="relative">
             <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 font-bold mono">₹</span>
-            <input type="number" id="formAmount" step="0.01" min="0.01" required placeholder="0.00"
-              class="w-full bg-surface2 border border-borderDark rounded-xl pl-9 pr-4 py-2.5 text-base font-semibold mono text-emerald-400 focus:outline-none focus:border-emerald-500 transition-colors">
+            <input type="number" inputmode="decimal" id="formAmount" step="0.01" min="0.01" required placeholder="0.00"
+              class="w-full bg-surface2 border border-borderDark rounded-xl pl-9 pr-4 h-12 text-base font-semibold mono text-emerald-400 focus:outline-none focus:border-emerald-500 transition-colors">
           </div>
           <!-- Quick Amount Chips -->
-          <div class="flex gap-2 mt-2">
-            <button type="button" class="quick-amt text-[11px] px-2 py-0.5 rounded-md bg-surface2 border border-borderDark text-zinc-400 hover:text-white" data-amt="100">+₹100</button>
-            <button type="button" class="quick-amt text-[11px] px-2 py-0.5 rounded-md bg-surface2 border border-borderDark text-zinc-400 hover:text-white" data-amt="500">+₹500</button>
-            <button type="button" class="quick-amt text-[11px] px-2 py-0.5 rounded-md bg-surface2 border border-borderDark text-zinc-400 hover:text-white" data-amt="1000">+₹1,000</button>
-            <button type="button" class="quick-amt text-[11px] px-2 py-0.5 rounded-md bg-surface2 border border-borderDark text-zinc-400 hover:text-white" data-amt="2000">+₹2,000</button>
+          <div class="flex flex-wrap gap-2 mt-2">
+            <button type="button" class="quick-amt text-xs h-9 px-3 rounded-md bg-surface2 border border-borderDark text-zinc-400 hover:text-white" data-amt="100">+₹100</button>
+            <button type="button" class="quick-amt text-xs h-9 px-3 rounded-md bg-surface2 border border-borderDark text-zinc-400 hover:text-white" data-amt="500">+₹500</button>
+            <button type="button" class="quick-amt text-xs h-9 px-3 rounded-md bg-surface2 border border-borderDark text-zinc-400 hover:text-white" data-amt="1000">+₹1,000</button>
+            <button type="button" class="quick-amt text-xs h-9 px-3 rounded-md bg-surface2 border border-borderDark text-zinc-400 hover:text-white" data-amt="2000">+₹2,000</button>
           </div>
         </div>
 
@@ -299,14 +334,14 @@ export function renderHtml(): string {
         <div>
           <label class="block text-xs font-medium text-zinc-400 mb-1">Description / Title *</label>
           <input type="text" id="formDescription" required placeholder="e.g. Swiggy Lunch, Metro Recharge, Groceries"
-            class="w-full bg-surface2 border border-borderDark rounded-xl px-3.5 py-2 text-sm text-zinc-200 focus:outline-none focus:border-emerald-500 transition-colors">
+            class="w-full bg-surface2 border border-borderDark rounded-xl px-3.5 h-11 text-zinc-200 focus:outline-none focus:border-emerald-500 transition-colors">
         </div>
 
         <!-- Category & Payment Method Grid -->
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 min-[420px]:grid-cols-2 gap-3">
           <div>
             <label class="block text-xs font-medium text-zinc-400 mb-1">Category *</label>
-            <select id="formCategory" required class="w-full bg-surface2 border border-borderDark text-zinc-200 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500">
+            <select id="formCategory" required class="w-full bg-surface2 border border-borderDark text-zinc-200 rounded-xl px-3 h-11 focus:outline-none focus:border-emerald-500">
               <option value="Food & Dining">🍔 Food & Dining</option>
               <option value="Groceries">🛒 Groceries</option>
               <option value="Shopping">🛍️ Shopping</option>
@@ -322,7 +357,7 @@ export function renderHtml(): string {
 
           <div>
             <label class="block text-xs font-medium text-zinc-400 mb-1">Payment Method</label>
-            <select id="formPaymentMethod" class="w-full bg-surface2 border border-borderDark text-zinc-200 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500">
+            <select id="formPaymentMethod" class="w-full bg-surface2 border border-borderDark text-zinc-200 rounded-xl px-3 h-11 focus:outline-none focus:border-emerald-500">
               <option value="UPI">UPI</option>
               <option value="Credit Card">Credit Card</option>
               <option value="Debit Card">Debit Card</option>
@@ -336,22 +371,22 @@ export function renderHtml(): string {
         <div>
           <label class="block text-xs font-medium text-zinc-400 mb-1">Date *</label>
           <input type="date" id="formDate" required
-            class="w-full bg-surface2 border border-borderDark rounded-xl px-3.5 py-2 text-sm text-zinc-200 focus:outline-none focus:border-emerald-500 transition-colors">
+            class="w-full bg-surface2 border border-borderDark rounded-xl px-3.5 h-11 text-zinc-200 focus:outline-none focus:border-emerald-500 transition-colors">
         </div>
 
         <!-- Notes / Remarks -->
         <div>
           <label class="block text-xs font-medium text-zinc-400 mb-1">Notes (Optional)</label>
           <textarea id="formNotes" rows="2" placeholder="Optional details, transaction ID, or bill reference"
-            class="w-full bg-surface2 border border-borderDark rounded-xl px-3.5 py-2 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500 transition-colors"></textarea>
+            class="w-full bg-surface2 border border-borderDark rounded-xl px-3.5 py-2 text-zinc-200 focus:outline-none focus:border-emerald-500 transition-colors"></textarea>
         </div>
 
         <!-- Submit & Cancel buttons -->
-        <div class="flex items-center justify-end gap-3 pt-3 border-t border-borderDark">
-          <button type="button" id="cancelModalBtn" class="px-4 py-2 text-xs font-medium text-zinc-400 hover:text-white transition-colors">
+        <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 pt-3 border-t border-borderDark">
+          <button type="button" id="cancelModalBtn" class="h-11 px-4 text-sm font-medium text-zinc-400 hover:text-white transition-colors">
             Cancel
           </button>
-          <button type="submit" id="saveExpenseBtn" class="px-5 py-2 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black rounded-lg transition-all shadow-md shadow-emerald-500/20">
+          <button type="submit" id="saveExpenseBtn" class="h-11 px-5 text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 text-black rounded-lg transition-all shadow-md shadow-emerald-500/20">
             Save Expense
           </button>
         </div>
@@ -360,13 +395,21 @@ export function renderHtml(): string {
   </div>
 
   <!-- Toast Notification Container -->
-  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2"></div>
+  <div id="toastContainer" class="fixed z-50 flex flex-col gap-2 left-3 right-3 sm:left-auto sm:right-5 sm:w-80 bottom-[max(1rem,env(safe-area-inset-bottom))]"></div>
 
   <!-- Client-side Logic -->
   <script>
     let expenses = [];
     let categoryChart = null;
     let trendChart = null;
+
+    function redirectIfSignedOut(res) {
+      if (res.status === 401 || res.status === 403) {
+        window.location.assign('/sign-in?reason=' + (res.status === 403 ? 'not-allowed' : 'signed-out'));
+        return true;
+      }
+      return false;
+    }
 
     // INR Formatter
     const formatINR = (val) => {
@@ -425,6 +468,7 @@ export function renderHtml(): string {
 
       try {
         const res = await fetch('/api/expenses?' + params.toString());
+        if (redirectIfSignedOut(res)) return;
         const data = await res.json();
         expenses = data.expenses || [];
         renderTable();
@@ -440,8 +484,10 @@ export function renderHtml(): string {
 
     function renderTable() {
       const body = document.getElementById('transactionsBody');
+      const cards = document.getElementById('transactionsCards');
       const empty = document.getElementById('emptyState');
       body.innerHTML = '';
+      cards.innerHTML = '';
 
       if (!expenses || expenses.length === 0) {
         empty.classList.remove('hidden');
@@ -450,23 +496,25 @@ export function renderHtml(): string {
       empty.classList.add('hidden');
 
       expenses.forEach(item => {
+        const color = categoryColors[item.category] || '#71717a';
+        const notes = item.notes
+          ? \`<div class="text-[11px] text-zinc-500 truncate mt-0.5">\${escapeHtml(item.notes)}</div>\`
+          : '';
+        const categoryPill = \`
+            <span class="inline-flex items-center max-w-[11rem] truncate px-2.5 py-1 rounded-full text-[11px] font-medium border"
+                  style="background-color: \${color}15; color: \${color}; border-color: \${color}30">
+              \${escapeHtml(item.category)}
+            </span>\`;
+
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-surface2/60 transition-colors group';
-
-        const color = categoryColors[item.category] || '#71717a';
-
         tr.innerHTML = \`
           <td class="py-3 px-4 text-xs text-zinc-400 whitespace-nowrap mono">\${item.date}</td>
           <td class="py-3 px-4">
             <div class="font-medium text-white text-sm">\${escapeHtml(item.description)}</div>
-            \${item.notes ? \`<div class="text-[11px] text-zinc-500 truncate max-w-xs">\${escapeHtml(item.notes)}</div>\` : ''}
+            \${notes}
           </td>
-          <td class="py-3 px-4 whitespace-nowrap">
-            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border"
-                  style="background-color: \${color}15; color: \${color}; border-color: \${color}30">
-              \${escapeHtml(item.category)}
-            </span>
-          </td>
+          <td class="py-3 px-4 whitespace-nowrap">\${categoryPill}</td>
           <td class="py-3 px-4 whitespace-nowrap">
             <span class="text-xs text-zinc-400 bg-surface2 px-2 py-0.5 rounded border border-borderDark font-mono">\${escapeHtml(item.payment_method)}</span>
           </td>
@@ -485,6 +533,34 @@ export function renderHtml(): string {
           </td>
         \`;
         body.appendChild(tr);
+
+        const card = document.createElement('article');
+        card.className = 'rounded-xl border border-borderDark bg-black/30 p-3';
+        card.innerHTML = \`
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div class="font-medium text-white text-sm truncate">\${escapeHtml(item.description)}</div>
+              \${notes}
+            </div>
+            <div class="font-semibold text-white mono shrink-0">\${formatINR(item.amount)}</div>
+          </div>
+          <div class="mt-2 flex items-center gap-1.5 min-w-0">
+            \${categoryPill}
+            <span class="text-[11px] text-zinc-400 bg-surface2 px-2 py-0.5 rounded border border-borderDark font-mono shrink-0">\${escapeHtml(item.payment_method)}</span>
+          </div>
+          <div class="mt-2 flex items-center justify-between gap-2">
+            <span class="text-[11px] text-zinc-500 mono">\${item.date}</span>
+            <div class="flex items-center">
+              <button onclick="editExpense('\${item.id}')" aria-label="Edit" class="h-11 w-11 flex items-center justify-center text-zinc-400 hover:text-white rounded-lg">
+                <i data-lucide="edit-2" class="w-4 h-4"></i>
+              </button>
+              <button onclick="deleteExpense('\${item.id}')" aria-label="Delete" class="h-11 w-11 flex items-center justify-center text-zinc-400 hover:text-rose-400 rounded-lg">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+        \`;
+        cards.appendChild(card);
       });
 
       if (window.lucide) lucide.createIcons();
@@ -641,6 +717,7 @@ export function renderHtml(): string {
     function openModal(isEdit = false) {
       modal.classList.remove('hidden');
       modal.classList.add('flex');
+      document.body.style.overflow = 'hidden';
       if (!isEdit) {
         form.reset();
         document.getElementById('formExpenseId').value = '';
@@ -653,6 +730,7 @@ export function renderHtml(): string {
     function closeModal() {
       modal.classList.add('hidden');
       modal.classList.remove('flex');
+      document.body.style.overflow = '';
     }
 
     window.editExpense = function(id) {
@@ -675,6 +753,7 @@ export function renderHtml(): string {
       if (!confirm('Are you sure you want to delete this expense?')) return;
       try {
         const res = await fetch('/api/expenses/' + id, { method: 'DELETE' });
+        if (redirectIfSignedOut(res)) return;
         if (res.ok) {
           showToast('Expense deleted successfully');
           fetchExpenses();
@@ -722,6 +801,7 @@ export function renderHtml(): string {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
+        if (redirectIfSignedOut(res)) return;
 
         if (res.ok) {
           showToast(id ? 'Expense updated' : 'Expense recorded');
@@ -756,9 +836,27 @@ export function renderHtml(): string {
       };
     }
 
+    function setupInstallHint() {
+      const hint = document.getElementById('installHint');
+      const standalone = window.navigator.standalone === true
+        || window.matchMedia('(display-mode: standalone)').matches;
+      const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      let dismissed = false;
+      try { dismissed = localStorage.getItem('hk-hide-install') === '1'; } catch (e) {}
+      if (ios && !standalone && !dismissed) hint.classList.remove('hidden');
+      document.getElementById('dismissInstallHint').addEventListener('click', () => {
+        try { localStorage.setItem('hk-hide-install', '1'); } catch (e) {}
+        hint.classList.add('hidden');
+      });
+    }
+
     // Init
     window.addEventListener('DOMContentLoaded', () => {
       if (window.lucide) lucide.createIcons();
+      setupInstallHint();
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      }
       fetchExpenses();
     });
   </script>
