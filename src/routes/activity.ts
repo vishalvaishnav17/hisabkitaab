@@ -184,11 +184,23 @@ activityRouter.post('/api/activity/:id/restore', async (c) => {
       .prepare('SELECT * FROM people WHERE id = ?')
       .bind(entry.entity_id)
       .first();
+  } else if (entry.entity_type === 'bill') {
+    current = await db
+      .prepare('SELECT * FROM recurring_bills WHERE id = ?')
+      .bind(entry.entity_id)
+      .first();
+    if (current) {
+      const { results: participants } = await db
+        .prepare('SELECT person_id FROM recurring_bill_participants WHERE bill_id = ?')
+        .bind(entry.entity_id)
+        .all();
+      current.participant_ids = participants.map((p: any) => p.person_id);
+    }
   }
 
   const stmts = await restorer(db, snapshot);
 
-  const label = snapshot.description || snapshot.name || entry.entity_type;
+  const label = snapshot.title || snapshot.description || snapshot.name || entry.entity_type;
   const summary = `Restored ${label}`;
 
   const restoreActivityId = await logged(db, stmts, {

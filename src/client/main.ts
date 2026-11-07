@@ -6,6 +6,7 @@ import { renderFriends } from './views/friends';
 import { renderBills } from './views/bills';
 import { renderActivity } from './views/activity';
 import { setActiveTab } from './components/tab-bar';
+import { updateBillsTabBadge } from './bills-api';
 
 type RouteHandler = () => void | Promise<void>;
 
@@ -92,4 +93,5 @@ window.addEventListener('DOMContentLoaded', () => {
   });
   initDashboard();
   handleRoute();
+  updateBillsTabBadge();
 });
